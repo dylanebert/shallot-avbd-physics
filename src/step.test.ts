@@ -2,14 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { Compute, precompile, precompileAll, requestGPU } from "@dylanebert/shallot/runtime";
 import tgpu from "typegpu";
 import * as d from "typegpu/data";
-import {
-    body,
-    flat,
-    integerDiscipline,
-    noIntegerDivision,
-    pointerDiscipline,
-} from "../tests/wgsl";
 import * as m from "../tests/math";
+import { body, flat, integerDiscipline, noIntegerDivision, pointerDiscipline } from "../tests/wgsl";
 import {
     JOINT_GROUP,
     LDS_IO_GROUP,

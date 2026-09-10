@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { ShapeKind } from "@dylanebert/shallot";
 import { Hulls } from "@dylanebert/shallot/physics/core";
 import * as d from "typegpu/data";
-import { flat, integerDiscipline, noIntegerDivision, pointerDiscipline } from "../tests/wgsl";
 import { boxHull, collideHull as collideHullOracle, coneHull } from "../tests/hull";
+import { flat, integerDiscipline, noIntegerDivision, pointerDiscipline } from "../tests/wgsl";
 import {
     boxBoxWgsl,
     collideHull,
