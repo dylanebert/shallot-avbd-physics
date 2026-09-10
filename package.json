@@ -22,7 +22,6 @@
         "./core": "./src/core.ts"
     },
     "files": ["src", "!src/**/*.test.ts"],
-    "workspaces": ["examples/*"],
     "scripts": {
         "check": "tsc --noEmit && biome check",
         "test": "bun test src"
