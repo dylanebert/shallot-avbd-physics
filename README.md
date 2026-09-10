@@ -25,7 +25,7 @@ Or add `AvbdPlugin` to your plugin list in code. Read live poses with `Avbd.read
 
 - `src/`: the plugin (`index.ts`), GPU step (`step.ts`), narrowphase (`collide.ts`) and hull packing
 - `tests/`: the f64 CPU oracle, a port of the reference C++, with committed gold vectors
-- `examples/collapse`, `examples/sandbox`: showcase projects built on the solver
+- `ARCHIVE.md`: retired examples, indexed by Git tag
 
 ## Developing
 
@@ -36,7 +36,7 @@ bun test src                # kernel structure and CPU-callable math
 bun test ./tests/*.oracle.ts
 ```
 
-The `*.tier.ts` files and the examples' `gate` scripts need a real GPU.
+The `*.tier.ts` files need a real GPU.
 
 ### Against a local engine
 
