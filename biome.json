@@ -1,0 +1,62 @@
+{
+    "$schema": "https://biomejs.dev/schemas/2.5.10/schema.json",
+    "files": {
+        "includes": [
+            "src/**/*.ts",
+            "tests/**/*.ts",
+            "examples/**/*.ts",
+            "!tests/fixtures",
+            "!examples/*/public"
+        ]
+    },
+    "linter": {
+        "enabled": true,
+        "rules": {
+            "preset": "recommended",
+            "correctness": {
+                "noUnusedImports": "error",
+                "noUnusedVariables": "error",
+                "noUnusedFunctionParameters": "error",
+                "useParseIntRadix": "off"
+            },
+            "style": {
+                "noNonNullAssertion": "off",
+                "useNodejsImportProtocol": "off",
+                "useExponentiationOperator": "off",
+                "useTemplate": "off"
+            },
+            "suspicious": {
+                "noExplicitAny": "off",
+                "noAssignInExpressions": "off",
+                "noConfusingVoidType": "off",
+                "noTsIgnore": "off"
+            },
+            "complexity": {
+                "useLiteralKeys": "off",
+                "noUselessUndefinedInitialization": "off"
+            }
+        }
+    },
+    "assist": {
+        "enabled": true,
+        "actions": {
+            "source": {
+                "organizeImports": "on"
+            }
+        }
+    },
+    "formatter": {
+        "enabled": true,
+        "indentWidth": 4,
+        "indentStyle": "space",
+        "lineWidth": 100,
+        "lineEnding": "lf"
+    },
+    "javascript": {
+        "formatter": {
+            "semicolons": "always",
+            "quoteStyle": "double",
+            "trailingCommas": "all"
+        }
+    }
+}
