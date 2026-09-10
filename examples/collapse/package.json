@@ -1,0 +1,15 @@
+{
+    "name": "collapse",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "gate": "playwright test"
+    },
+    "dependencies": {
+        "@dylanebert/shallot-avbd-physics": "file:../.."
+    },
+    "devDependencies": {
+        "@playwright/test": "^1.63.0"
+    }
+}
