@@ -23,8 +23,11 @@
     },
     "files": ["src", "!src/**/*.test.ts"],
     "scripts": {
-        "check": "tsc --noEmit && biome check",
-        "test": "bun test src"
+        "check": "tsc --noEmit && biome check && shallot check",
+        "list": "shallot list",
+        "workflow": "shallot workflow",
+        "test": "shallot test",
+        "test:integration": "shallot test:integration"
     },
     "peerDependencies": {
         "@dylanebert/shallot": "^0.9.5",

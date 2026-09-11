@@ -42,7 +42,7 @@
 // `COPY_SRC` by construction), and the B_* column indices are imported from `step.ts` so the
 // probe offsets cannot drift from the solver's own layout.
 
-import { describe, expect, test } from "bun:test";
+import { expect } from "bun:test";
 import {
     Body,
     build,
@@ -57,6 +57,7 @@ import {
     SlabPlugin,
     TransformsPlugin,
 } from "@dylanebert/shallot";
+import { check } from "@dylanebert/shallot/harness/check";
 import { Avbd, AvbdPlugin } from "../src/index";
 import { B_POS, B_QUAT, B_VELL } from "../src/step";
 
@@ -104,8 +105,15 @@ function expectFinite(pose: { pos: number[]; quat: number[]; vel: number[] }): v
     }
 }
 
-describe("headless lavapipe physics (build + step + probeBuffer readback)", () => {
-    test("AvbdPlugin builds, steps, and probes finite body poses at capacity 8192", async () => {
+//  headless lavapipe physics (build + step + probeBuffer readback)
+check(
+    "AvbdPlugin builds, steps, and probes finite body poses at capacity 8192",
+    {
+        claim: "gpu headless avbdplugin builds, steps, and probes finite body poses at capacity 8192",
+        size: "integration",
+        requires: ["gpu"],
+    },
+    async () => {
         const app = await build({
             plugins: [SlabPlugin, MirrorPlugin, AvbdPlugin],
             defaults: false,
@@ -142,9 +150,17 @@ describe("headless lavapipe physics (build + step + probeBuffer readback)", () =
         expect(pose.pos[1]).toBeLessThan(6);
         expect(pose.pos[1]).toBeGreaterThan(5.9);
         app.dispose();
-    });
+    },
+);
 
-    test("CharacterPlugin sweeps headlessly at the same capacity", async () => {
+check(
+    "CharacterPlugin sweeps headlessly at the same capacity",
+    {
+        claim: "gpu headless characterplugin sweeps headlessly at the same capacity",
+        size: "integration",
+        requires: ["gpu"],
+    },
+    async () => {
         const app = await build({
             plugins: [SlabPlugin, MirrorPlugin, AvbdPlugin, CharacterPlugin],
             defaults: false,
@@ -184,9 +200,17 @@ describe("headless lavapipe physics (build + step + probeBuffer readback)", () =
         expect(pose.pos[1]).toBeLessThan(3);
         expect(pose.pos[1]).toBeGreaterThan(2.9);
         app.dispose();
-    });
+    },
+);
 
-    test("PlayerPlugin composes headlessly at the same capacity", async () => {
+check(
+    "PlayerPlugin composes headlessly at the same capacity",
+    {
+        claim: "gpu headless playerplugin composes headlessly at the same capacity",
+        size: "integration",
+        requires: ["gpu"],
+    },
+    async () => {
         const app = await build({
             plugins: [
                 SlabPlugin,
@@ -223,5 +247,5 @@ describe("headless lavapipe physics (build + step + probeBuffer readback)", () =
         expect(pose.pos[1]).toBeGreaterThan(1.35);
         expect(pose.pos[1]).toBeLessThan(1.45);
         app.dispose();
-    });
-});
+    },
+);

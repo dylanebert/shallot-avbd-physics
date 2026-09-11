@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { expect } from "bun:test";
+import { check } from "@dylanebert/shallot/harness/check";
 import { Compute, probeBuffer, requestGPU } from "@dylanebert/shallot/runtime";
 import {
     B_POS,
@@ -46,8 +47,15 @@ function seed(bodies: Body[]): Float32Array {
     return out;
 }
 
-describe("headless AVBD execution sentinel", () => {
-    test("produces the intended contact and a geometry-bounded pose", async () => {
+//  headless AVBD execution sentinel
+check(
+    "produces the intended contact and a geometry-bounded pose",
+    {
+        claim: "gpu differential execution produces the intended contact and a geometry-bounded pose",
+        size: "integration",
+        requires: ["gpu"],
+    },
+    async () => {
         const previousCompute = { ...Compute };
         let device: GPUDevice | undefined;
         let physics: PhysicsStep | undefined;
@@ -130,5 +138,5 @@ describe("headless AVBD execution sentinel", () => {
                 }
             }
         }
-    });
-});
+    },
+);
