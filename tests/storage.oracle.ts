@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { expect } from "bun:test";
+import { check } from "@dylanebert/shallot/harness/check";
 import { UnsupportedError } from "@dylanebert/shallot/runtime";
 import { CONTACT_VEC4, CONTACTS_PER_PAIR, checkContactStore, PAIRS_PER_BODY } from "../src/step";
 
@@ -11,8 +12,10 @@ const DEFAULT_BINDING_LIMIT = 128 * MB; // the WebGPU maxStorageBufferBindingSiz
 const storeBytes = (eidCount: number): number =>
     eidCount * PAIRS_PER_BODY * CONTACTS_PER_PAIR * CONTACT_VEC4 * 16;
 
-describe("physics contact-store device-limit guard", () => {
-    test("a full-capacity store exceeds the 128 MB default and fails loud + clear", () => {
+check(
+    "a full-capacity store exceeds the 128 MB default and fails loud + clear",
+    { claim: "contact store rejects a full-capacity binding over the default limit" },
+    () => {
         // the case the guard exists for: at 65536 eids the per-eid store is ~235 MB, over the default
         // binding limit — it binds only because acquireDevice now requests the adapter's full size.
         expect(storeBytes(65536)).toBeGreaterThan(DEFAULT_BINDING_LIMIT);
@@ -29,18 +32,26 @@ describe("physics contact-store device-limit guard", () => {
         expect(msg).toContain("contact store");
         expect(msg).toContain("maxStorageBufferBindingSize");
         expect(msg).toContain("capacity");
-    });
+    },
+);
 
-    test("a small-capacity store fits under the default", () => {
+check(
+    "a small-capacity store fits under the default",
+    { claim: "contact store accepts a small capacity under the default limit" },
+    () => {
         // an 8192-eid store → ~28 MB, well under the 128 MB default — a small-capacity scene needs no raised
         // limit (the store sizes to capacity, so this is a capacity ≈ 8192 scene).
         expect(storeBytes(8192)).toBeLessThanOrEqual(DEFAULT_BINDING_LIMIT);
         expect(() => checkContactStore(8192, DEFAULT_BINDING_LIMIT)).not.toThrow();
-    });
+    },
+);
 
-    test("the boundary is exclusive: exactly at the limit fits, one byte over throws", () => {
+check(
+    "the boundary is exclusive: exactly at the limit fits, one byte over throws",
+    { claim: "contact store boundary accepts exact capacity and rejects one byte over" },
+    () => {
         const exact = storeBytes(8192);
         expect(() => checkContactStore(8192, exact)).not.toThrow();
         expect(() => checkContactStore(8192, exact - 1)).toThrow(UnsupportedError);
-    });
-});
+    },
+);

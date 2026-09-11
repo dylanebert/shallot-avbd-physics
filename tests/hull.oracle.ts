@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { expect } from "bun:test";
+import { check } from "@dylanebert/shallot/harness/check";
 import { type Box, collide } from "./collide";
 import { boxHull, collideHull, coneHull, type Hull, tetHull } from "./hull";
 import hullGold from "./hull-gold-vectors.json";
@@ -49,9 +50,11 @@ const dRelOf = (a: GoldBody, b: GoldBody): Vec3 => scale(sub(a.vel as Vec3, b.ve
 // a contact's two world surface anchors (a box has radius 0, so the arm is the bare surface point)
 const worldXA = (pos: Vec3, quat: Quat, rA: Vec3): Vec3 => add(rotate(quat, rA), pos);
 
-describe("hull SAT — box-as-hull reproduces box-box collide", () => {
-    for (const cfg of boxGold.configs as BoxGoldConfig[]) {
-        test(cfg.name, () => {
+check(
+    "hull SAT — box-as-hull reproduces box-box collide",
+    { claim: "box-as-hull SAT preserves every bounded box-box manifold" },
+    () => {
+        for (const cfg of boxGold.configs as BoxGoldConfig[]) {
             const a = box(cfg.a);
             const b = box(cfg.b);
             const dRel = dRelOf(cfg.a, cfg.b);
@@ -105,9 +108,9 @@ describe("hull SAT — box-as-hull reproduces box-box collide", () => {
                     expect(best.xB[i]).toBeCloseTo(r.xB[i], 6);
                 }
             }
-        });
-    }
-});
+        }
+    },
+);
 
 // ── gate 2: bullet3-sat-harness cross-check (tet, cone) ───────────────
 
@@ -141,9 +144,11 @@ const HULLS: Record<string, [Hull, Hull]> = {
     "cone8-tet-overlap": [coneHull(0.3, 0.8, 8), tetHull(0.5)],
 };
 
-describe("hull SAT — bullet3-sat-harness cross-check (tet, cone)", () => {
-    for (const cfg of hullGold as HullGoldConfig[]) {
-        test(cfg.name, () => {
+check(
+    "hull SAT — bullet3-sat-harness cross-check (tet, cone)",
+    { claim: "non-box hull SAT preserves every bounded Bullet axis" },
+    () => {
+        for (const cfg of hullGold as HullGoldConfig[]) {
             const [hullA, hullB] = HULLS[cfg.name];
             const { contacts, basis } = collideHull(
                 hullA,
@@ -169,19 +174,21 @@ describe("hull SAT — bullet3-sat-harness cross-check (tet, cone)", () => {
             const sepN = cfg.separatingNormal as Vec3;
             expect(contacts.length).toBeGreaterThan(0);
             expect(Math.abs(dot(basis[0], sepN))).toBeCloseTo(1, 3);
-        });
-    }
-});
+        }
+    },
+);
 
 // ── dispatch + capsule segment-clip + through the solver ─────────────
 
 const Z90: Quat = [0, 0, Math.SQRT1_2, Math.SQRT1_2]; // 90° about Z: the +Y capsule axis → −X (horizontal)
 const COLLISION_MARGIN = 0.01;
 
-describe("hull narrowphase — dispatch routing", () => {
-    // a box-hull body vs a box body routes through the hull SAT (collideHull) and must agree with the
-    // box-box SAT on the normal + contact count — the dispatch wiring over the geometry gate 1 already pins.
-    test("box-hull vs box (dispatch) agrees with box-box on the normal + count", () => {
+// a box-hull body vs a box body routes through the hull SAT (collideHull) and must agree with the
+// box-box SAT on the normal + contact count — the dispatch wiring over the geometry gate 1 already pins.
+check(
+    "box-hull vs box (dispatch) agrees with box-box on the normal + count",
+    { claim: "hull dispatch agrees with box-box normal and contact count" },
+    () => {
         const a = body([1, 1, 1], 1, 0.5, [0, 0.97, 0]); // a unit box resting (shallow, interior) on a ground
         const ground = body([10, 1, 10], 0, 0.5, [0, 0, 0]);
         const groundHull = hull(boxHull([10, 1, 10]), 0, 0.5, [0, 0, 0]);
@@ -197,23 +204,29 @@ describe("hull narrowphase — dispatch routing", () => {
         expect(ref.contacts.length).toBe(4); // a 4-point face manifold (the realistic rest)
         expect(got.contacts.length).toBe(ref.contacts.length);
         for (let i = 0; i < 3; i++) expect(got.basis[0][i]).toBeCloseTo(ref.basis[0][i], 7);
-    });
+    },
+);
 
-    test("hull vs hull (two box-hulls) produces a 4-point resting manifold", () => {
+check(
+    "hull vs hull (two box-hulls) produces a 4-point resting manifold",
+    { claim: "hull dispatch produces a four-point box-hull rest manifold" },
+    () => {
         const top = hull(boxHull([1, 1, 1]), 1, 0.5, [0, 0.97, 0]);
         const bottom = hull(boxHull([10, 1, 10]), 0, 0.5, [0, 0, 0]);
         const { contacts, basis } = narrowphase(top, bottom);
         expect(contacts.length).toBe(4);
         for (let i = 0; i < 3; i++) expect(basis[0][i]).toBeCloseTo([0, 1, 0][i], 6); // B→A points up
-    });
-});
+    },
+);
 
-describe("capsule segment-clip — the mid-segment case endpoint sampling misses", () => {
-    // a long capsule lying horizontally over a SMALL box: the segment (x ∈ [−1.5, 1.5]) overhangs the box
-    // top face (x ∈ [−0.5, 0.5]) on both ends. Endpoint sampling would anchor the contacts at the far
-    // overhanging endpoints (off the face); the segment-clip clips the core to the face region, so the two
-    // contacts land at the face edges (x ≈ ±0.5) over the top face — the stable rest.
-    test("a capsule overhanging a small box rests on the face region, not the overhanging tips", () => {
+// a long capsule lying horizontally over a SMALL box: the segment (x ∈ [−1.5, 1.5]) overhangs the box
+// top face (x ∈ [−0.5, 0.5]) on both ends. Endpoint sampling would anchor the contacts at the far
+// overhanging endpoints (off the face); the segment-clip clips the core to the face region, so the two
+// contacts land at the face edges (x ≈ ±0.5) over the top face — the stable rest.
+check(
+    "a capsule overhanging a small box rests on the face region, not the overhanging tips",
+    { claim: "capsule segment clipping anchors overhanging contacts on the face" },
+    () => {
         const cap = capsule(1.5, 0.4, 1, 0.5, [0, 0.9, 0], [0, 0, 0], Z90); // half-length 1.5, horizontal
         const box = body([1, 1, 1], 0, 0.5, [0, 0, 0]); // top face y = 0.5, spans x ∈ [−0.5, 0.5]
         const { contacts, basis } = narrowphase(cap, box);
@@ -224,13 +237,15 @@ describe("capsule segment-clip — the mid-segment case endpoint sampling misses
             const core = add(rotate(cap.posAng, c.rA), cap.posLin);
             expect(Math.abs(core[0])).toBeLessThanOrEqual(0.5 + 1e-6);
         }
-    });
-});
+    },
+);
 
-describe("hull — through the solver", () => {
-    // a box-hull dropped on a box ground settles at the box-box margin rest; the hull pipeline end to end
-    // (the hull bounding radius broadphase → collideHull → the contact Force → BDF1 settle).
-    test("a box-hull rests on a box ground at the margin rest", () => {
+// a box-hull dropped on a box ground settles at the box-box margin rest; the hull pipeline end to end
+// (the hull bounding radius broadphase → collideHull → the contact Force → BDF1 settle).
+check(
+    "a box-hull rests on a box ground at the margin rest",
+    { claim: "hull solver settles a box-hull at the collision margin" },
+    () => {
         const s = makeSolver([
             body([10, 1, 10], 0, 0.5, [0, 0, 0]), // static box ground, top at y = 0.5
             hull(boxHull([1, 1, 1]), 1, 0.5, [0, 3, 0]), // a unit box-hull dropped from above
@@ -240,9 +255,13 @@ describe("hull — through the solver", () => {
         expect(length(cube.velLin)).toBeLessThan(2e-3);
         // half-height 0.5 above the ground top (0.5), sunk a small mg/k below the margin
         expect(Math.abs(cube.posLin[1] - (0.5 + 0.5 - COLLISION_MARGIN))).toBeLessThan(3e-3);
-    });
+    },
+);
 
-    test("two box-hulls stack on a box ground", () => {
+check(
+    "two box-hulls stack on a box ground",
+    { claim: "hull solver settles two stacked box-hulls" },
+    () => {
         const s = makeSolver([
             body([10, 1, 10], 0, 0.5, [0, 0, 0]),
             hull(boxHull([1, 1, 1]), 1, 0.5, [0, 1.2, 0]),
@@ -256,5 +275,5 @@ describe("hull — through the solver", () => {
         // resting heights: lower centre ≈ 1.0, upper ≈ 2.0 (each a unit cube), within a few mg/k
         expect(Math.abs(lower.posLin[1] - 1.0)).toBeLessThan(2e-2);
         expect(Math.abs(upper.posLin[1] - 2.0)).toBeLessThan(3e-2);
-    });
-});
+    },
+);
