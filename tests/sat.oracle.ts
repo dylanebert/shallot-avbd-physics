@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { expect } from "bun:test";
+import { check } from "@dylanebert/shallot/harness/check";
 import * as d from "typegpu/data";
 // the shipped narrowphase, called on the CPU — the same TGSL source the GPU collide pass splices
 import { collideBoxBox, MAX_CONTACTS } from "../src/collide";
@@ -56,9 +57,11 @@ const near = (got: number, want: number): void => {
     expect(Math.abs(got - want)).toBeLessThan(TOL);
 };
 
-describe("box-box SAT vs C++ gold vectors", () => {
-    for (const cfg of gold.configs as GoldConfig[]) {
-        test(cfg.name, () => {
+check(
+    "box-box SAT vs C++ gold vectors",
+    { claim: "box-box SAT preserves every bounded C++ gold manifold" },
+    () => {
+        for (const cfg of gold.configs as GoldConfig[]) {
             const { contacts, basis } = collide(box(cfg.a), box(cfg.b), dRel(cfg));
 
             // count is exact — a different count means a different separating axis / clip
@@ -79,14 +82,18 @@ describe("box-box SAT vs C++ gold vectors", () => {
                 for (let i = 0; i < 3; i++) near(got.rA[i], want.rA[i]);
                 for (let i = 0; i < 3; i++) near(got.rB[i], want.rB[i]);
             }
-        });
-    }
+        }
+    },
+);
 
-    test("observed max error is well under tolerance", () => {
+check(
+    "observed max error is well under tolerance",
+    { claim: "box-box SAT gold error remains below the derived tolerance" },
+    () => {
         console.log(`[sat] max abs error vs gold: ${maxErr.toExponential(2)} (tol ${TOL})`);
         expect(maxErr).toBeLessThan(TOL);
-    });
-});
+    },
+);
 
 // Feature-key continuity. The key's low byte
 // is the clip-vertex loop index, so a reordered Sutherland-Hodgman output silently reassigns keys —
@@ -105,52 +112,62 @@ describe("box-box SAT vs C++ gold vectors", () => {
 // `collide` returns the SAT min-separation alongside the manifold — the signed overlap depth the gym
 // `no-overlap` gate reads to flag severely interpenetrating settled bodies (penetration = −separation).
 // Pin the sign + magnitude convention the gate depends on; a flipped sign would read overlap as clearance.
-describe("box-box SAT separation (the overlap depth the no-overlap gate reads)", () => {
-    test("axis-aligned overlap → separation is the negative penetration depth", () => {
+check(
+    "axis-aligned overlap → separation is the negative penetration depth",
+    { claim: "SAT separation reports negative axis-aligned penetration" },
+    () => {
         // unit boxes, centers 0.8 apart on x: spans [-0.5,0.5] and [0.3,1.3] overlap 0.2 → the SAT
         // min-separation = centerΔ − (halfA + halfB) = 0.8 − 1.0 = −0.2 (penetrating by 0.2).
         const a: Box = { size: [1, 1, 1], pos: [0, 0, 0], quat: [0, 0, 0, 1] };
         const b: Box = { size: [1, 1, 1], pos: [0.8, 0, 0], quat: [0, 0, 0, 1] };
         expect(collide(a, b).separation).toBeCloseTo(-0.2, 5);
-    });
-    test("a non-penetrating near pair → positive separation (the gate reads no penetration)", () => {
+    },
+);
+
+check(
+    "a non-penetrating near pair → positive separation (the gate reads no penetration)",
+    { claim: "SAT separation reports positive clearance for a near pair" },
+    () => {
         // centers 1.3 apart → a 0.3 gap (≫ the speculative band), so collide reports a positive
         // separation; the gate's `−separation` is then ≤ 0 → contributes no penetration.
         const a: Box = { size: [1, 1, 1], pos: [0, 0, 0], quat: [0, 0, 0, 1] };
         const b: Box = { size: [1, 1, 1], pos: [1.3, 0, 0], quat: [0, 0, 0, 1] };
         expect(collide(a, b).separation).toBeGreaterThan(0);
-    });
-});
+    },
+);
 
-describe("box-box SAT feature-key continuity under sub-box perturbation", () => {
-    const baseA: Box = { size: [10, 1, 10], pos: [0, 0, 0], quat: [0, 0, 0, 1] }; // ground
-    const baseB: Box = { size: [1, 1, 1], pos: [0, 0.97, 0], quat: [0, 0, 0, 1] }; // box, interior, penetrating
+check(
+    "box-box SAT feature-key continuity under sub-box perturbation",
+    { claim: "SAT preserves feature keys under bounded interior perturbations" },
+    () => {
+        const baseA: Box = { size: [10, 1, 10], pos: [0, 0, 0], quat: [0, 0, 0, 1] }; // ground
+        const baseB: Box = { size: [1, 1, 1], pos: [0, 0.97, 0], quat: [0, 0, 0, 1] }; // box, interior, penetrating
 
-    // world contact location = midpoint of the two local arms transformed to world
-    const worldMid = (box: Box, other: Box, c: Contact): Vec3 =>
-        scale(add(transform(box.pos, box.quat, c.rA), transform(other.pos, other.quat, c.rB)), 0.5);
+        // world contact location = midpoint of the two local arms transformed to world
+        const worldMid = (box: Box, other: Box, c: Contact): Vec3 =>
+            scale(
+                add(transform(box.pos, box.quat, c.rA), transform(other.pos, other.quat, c.rB)),
+                0.5,
+            );
 
-    const yaw = (deg: number): Quat => {
-        const h = (deg * Math.PI) / 360;
-        return [0, Math.sin(h), 0, Math.cos(h)];
-    };
+        const yaw = (deg: number): Quat => {
+            const h = (deg * Math.PI) / 360;
+            return [0, Math.sin(h), 0, Math.cos(h)];
+        };
 
-    // ε perturbations of B that keep the same face-face contact (corner movement << inter-contact spacing 1.0)
-    const cases: { name: string; b: Box }[] = [
-        { name: "translate +x", b: { ...baseB, pos: [0.02, 0.97, 0] } },
-        { name: "translate -z", b: { ...baseB, pos: [0, 0.97, -0.02] } },
-        { name: "sink deeper", b: { ...baseB, pos: [0, 0.95, 0] } },
-        { name: "tiny yaw", b: { ...baseB, quat: yaw(0.5) } },
-    ];
+        // ε perturbations of B that keep the same face-face contact (corner movement << inter-contact spacing 1.0)
+        const cases: { name: string; b: Box }[] = [
+            { name: "translate +x", b: { ...baseB, pos: [0.02, 0.97, 0] } },
+            { name: "translate -z", b: { ...baseB, pos: [0, 0.97, -0.02] } },
+            { name: "sink deeper", b: { ...baseB, pos: [0, 0.95, 0] } },
+            { name: "tiny yaw", b: { ...baseB, quat: yaw(0.5) } },
+        ];
 
-    const base = collide(baseA, baseB);
+        const base = collide(baseA, baseB);
 
-    test("base config yields a 4-point face manifold", () => {
         expect(base.contacts.length).toBe(4);
-    });
 
-    for (const cs of cases) {
-        test(cs.name, () => {
+        for (const cs of cases) {
             const perturbed = collide(baseA, cs.b);
             // every base contact still present (matched by world midpoint within << spacing) keeps its key
             for (const b0 of base.contacts) {
@@ -171,9 +188,9 @@ describe("box-box SAT feature-key continuity under sub-box perturbation", () => 
                     `feature key 0x${(b0.feature >>> 0).toString(16)} preserved`,
                 ).toBe(b0.feature);
             }
-        });
-    }
-});
+        }
+    },
+);
 
 // Pins the CURRENT warmstart-key choice against accidental drift — not a proven-best decision. We key
 // on the stable clip-loop ordinal (a body-fixed corner id), matched by (a,b)+key; webphysics re-ordinals
@@ -184,18 +201,24 @@ describe("box-box SAT feature-key continuity under sub-box perturbation", () => 
 // interior manifold (no reduction); this reaches the OVER-PRODUCED clip the Jolt reduction prunes to 4,
 // where each kept contact keeps its ORIGINAL clip ordinal (a non-contiguous subset), so a rank-relabel
 // (which would emit exactly [0,1,2,3], the indices of the 4-element output array) goes red.
-describe("box-box SAT — reduced manifold keeps clip ordinals, not post-reduction rank", () => {
-    // two EQUAL unit boxes, B yawed about the contact normal (Y) and resting on A: the yawed incident
-    // square pokes past A's axis-aligned reference square on all four sides, so the Sutherland-Hodgman
-    // clip produces an octagon (> 4 candidates) and the reduction runs. (A larger ground would contain
-    // the incident face → 4 candidates, no reduction — that is the interior case above.)
-    const a: Box = { size: [1, 1, 1], pos: [0, 0, 0], quat: [0, 0, 0, 1] };
-    const yawB = (deg: number, sink: number): Box => {
-        const h = (deg * Math.PI) / 360;
-        return { size: [1, 1, 1], pos: [0, 1 - sink, 0], quat: [0, Math.sin(h), 0, Math.cos(h)] };
-    };
+check(
+    "reduction over-produces, then the kept keys are body-fixed clip ordinals (≠ array rank)",
+    { claim: "SAT reduction preserves original clip ordinals" },
+    () => {
+        // two EQUAL unit boxes, B yawed about the contact normal (Y) and resting on A: the yawed incident
+        // square pokes past A's axis-aligned reference square on all four sides, so the Sutherland-Hodgman
+        // clip produces an octagon (> 4 candidates) and the reduction runs. (A larger ground would contain
+        // the incident face → 4 candidates, no reduction — that is the interior case above.)
+        const a: Box = { size: [1, 1, 1], pos: [0, 0, 0], quat: [0, 0, 0, 1] };
+        const yawB = (deg: number, sink: number): Box => {
+            const h = (deg * Math.PI) / 360;
+            return {
+                size: [1, 1, 1],
+                pos: [0, 1 - sink, 0],
+                quat: [0, Math.sin(h), 0, Math.cos(h)],
+            };
+        };
 
-    test("reduction over-produces, then the kept keys are body-fixed clip ordinals (≠ array rank)", () => {
         const { contacts } = collide(a, yawB(35, 0.03));
         // the octagon reduced to the 4-point cap
         expect(contacts.length).toBe(4);
@@ -216,8 +239,8 @@ describe("box-box SAT — reduced manifold keeps clip ordinals, not post-reducti
         // contacts never collide on a key.
         const keys = contacts.map((c) => c.feature >>> 0);
         expect(new Set(keys).size).toBe(keys.length);
-    });
-});
+    },
+);
 
 // The SHIPPED narrowphase against the same gold, on the CPU. `collideBoxBox` (src/
 // collide.ts) is a TGSL function: the WGSL the GPU collide pass splices and a plain JS function are the
@@ -230,9 +253,11 @@ describe("box-box SAT — reduced manifold keeps clip ordinals, not post-reducti
 // That f64 CPU arm is also the coverage BOUNDARY: running on JS numbers it cannot see f32 reassociation at
 // all — a reordered sum passes here and diverges on the device. The guard against op-order drift is the
 // emitted-WGSL differential (reviewed per port) plus the gym gates, never this tier.
-describe("the shipped TGSL SAT vs C++ gold vectors", () => {
-    for (const cfg of gold.configs as GoldConfig[]) {
-        test(cfg.name, () => {
+check(
+    "the shipped TGSL SAT vs C++ gold vectors",
+    { claim: "shipped TGSL SAT preserves every bounded C++ gold manifold" },
+    () => {
+        for (const cfg of gold.configs as GoldConfig[]) {
             const dr = dRel(cfg);
             const r = collideBoxBox(
                 d.vec3f(...(cfg.a.pos as [number, number, number])),
@@ -269,17 +294,19 @@ describe("the shipped TGSL SAT vs C++ gold vectors", () => {
                 near(r.rB[k].y, want.rB[1]);
                 near(r.rB[k].z, want.rB[2]);
             }
-        });
-    }
-});
+        }
+    },
+);
 
 // The gold configs all clip to ≤ 4 candidates, so the block above never reaches the Jolt reduction. This
 // does: two equal unit boxes with B yawed about the contact normal clip to an octagon (the config the
 // "keeps clip ordinals" test above uses), so `pruneContacts` runs and its spread selection — which point
 // is p1, which is its farthest partner, which side of that line p3/p4 fall on — has to match the f64
 // oracle exactly, key for key. A wrong selection silently changes which 4 of the 8 contacts survive.
-describe("the shipped TGSL SAT reduces the over-produced clip like the oracle", () => {
-    test("the same 4 of 8 candidates, same keys, same arms", () => {
+check(
+    "the same 4 of 8 candidates, same keys, same arms",
+    { claim: "shipped TGSL SAT reduction matches the f64 oracle" },
+    () => {
         const h = (35 * Math.PI) / 360;
         const a: Box = { size: [1, 1, 1], pos: [0, 0, 0], quat: [0, 0, 0, 1] };
         const b: Box = {
@@ -311,5 +338,5 @@ describe("the shipped TGSL SAT reduces the over-produced clip like the oracle", 
             near(got.rB[k].y, want[k].rB[1]);
             near(got.rB[k].z, want[k].rB[2]);
         }
-    });
-});
+    },
+);

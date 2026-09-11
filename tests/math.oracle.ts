@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { expect } from "bun:test";
+import { check } from "@dylanebert/shallot/harness/check";
 import {
     dot,
     length,
@@ -35,33 +36,41 @@ function matvec6(a: number[][], x: number[]): number[] {
     return out;
 }
 
-describe("math — quaternion operators", () => {
-    test("q · q⁻¹ = identity for a unit quat", () => {
+check(
+    "q · q⁻¹ = identity for a unit quat",
+    { claim: "quaternion inverse multiplication returns identity" },
+    () => {
         const q = qnormalize([0.1, 0.7, -0.3, 0.4]);
         const id = qmul(q, qinverse(q));
         expect(id[0]).toBeCloseTo(0, 12);
         expect(id[1]).toBeCloseTo(0, 12);
         expect(id[2]).toBeCloseTo(0, 12);
         expect(id[3]).toBeCloseTo(1, 12);
-    });
+    },
+);
 
-    test("qsub inverts qadd for a small angular increment", () => {
+check(
+    "qsub inverts qadd for a small angular increment",
+    { claim: "quaternion add/sub recover a small angular increment" },
+    () => {
         // q ⊕ ω then ⊖ q recovers ω to first order; |ω|=2e-3 ⇒ O(|ω|²)≈4e-6 error
         const q: Quat = qnormalize([0.2, 0.5, -0.1, 0.9]);
         const omega: Vec3 = [1e-3, -1.5e-3, 0.8e-3];
         const recovered = qsub(qadd(q, omega), q);
         for (let i = 0; i < 3; i++) expect(recovered[i]).toBeCloseTo(omega[i], 5);
-    });
-});
+    },
+);
 
-describe("math — orthonormal basis", () => {
-    for (const n of [
-        normalize([0, 1, 0] as Vec3),
-        normalize([1, 0, 0] as Vec3),
-        normalize([0.3, 0.4, -0.87] as Vec3),
-        normalize([-0.9, 0.1, 0.05] as Vec3),
-    ]) {
-        test(`rows orthonormal, first row = normal (${n.map((x) => x.toFixed(2))})`, () => {
+check(
+    "rows orthonormal across four bounded normals",
+    { claim: "orthonormal basis preserves four bounded normals" },
+    () => {
+        for (const n of [
+            normalize([0, 1, 0] as Vec3),
+            normalize([1, 0, 0] as Vec3),
+            normalize([0.3, 0.4, -0.87] as Vec3),
+            normalize([-0.9, 0.1, 0.05] as Vec3),
+        ]) {
             const m = orthonormal(n);
             expect(m[0]).toEqual(n);
             expect(length(m[1])).toBeCloseTo(1, 12);
@@ -69,15 +78,17 @@ describe("math — orthonormal basis", () => {
             expect(dot(m[0], m[1])).toBeCloseTo(0, 12);
             expect(dot(m[0], m[2])).toBeCloseTo(0, 12);
             expect(dot(m[1], m[2])).toBeCloseTo(0, 12);
-        });
-    }
-});
+        }
+    },
+);
 
-describe("math — 6×6 LDLᵀ solve", () => {
-    // A = BBᵀ + I is SPD with eigenvalues ≥ 1 (well-conditioned). Build a known x,
-    // form b = Ax, decompose A into the lin/ang/cross block storage the solve reads,
-    // and check it recovers x. This exercises every index in the LDLᵀ transcription.
-    test("recovers x from b = Ax across seeds", () => {
+// A = BBᵀ + I is SPD with eigenvalues ≥ 1 (well-conditioned). Build a known x,
+// form b = Ax, decompose A into the lin/ang/cross block storage the solve reads,
+// and check it recovers x. This exercises every index in the LDLᵀ transcription.
+check(
+    "recovers x from b = Ax across seeds",
+    { claim: "six by six LDL transpose solve recovers bounded SPD systems" },
+    () => {
         for (let seed = 1; seed <= 8; seed++) {
             const rand = lcg(seed * 2654435761);
             const b: number[][] = Array.from({ length: 6 }, () =>
@@ -121,5 +132,5 @@ describe("math — 6×6 LDLᵀ solve", () => {
             const got = [...xLin, ...xAng];
             for (let i = 0; i < 6; i++) expect(got[i]).toBeCloseTo(xTrue[i], 9);
         }
-    });
-});
+    },
+);

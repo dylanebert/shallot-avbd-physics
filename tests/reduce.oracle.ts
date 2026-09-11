@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { expect } from "bun:test";
+import { check } from "@dylanebert/shallot/harness/check";
 import { type Cand, reduceManifold } from "./collide";
 import type { Vec3 } from "./math";
 import gold from "./reduce-gold.json";
@@ -24,9 +25,11 @@ interface GoldCase {
 
 const key = (p: Vec3): string => p.map((x) => x.toFixed(9)).join(",");
 
-describe("contact-manifold reduction vs verbatim-Jolt gold", () => {
-    for (const cfg of gold.cases as GoldCase[]) {
-        test(cfg.name, () => {
+check(
+    "contact-manifold reduction vs verbatim-Jolt gold",
+    { claim: "manifold reduction preserves every bounded verbatim-Jolt gold set" },
+    () => {
+        for (const cfg of gold.cases as GoldCase[]) {
             const cands: Cand[] = cfg.points.map((p, i) => ({
                 feature: i,
                 xA: p.xA as Vec3,
@@ -39,6 +42,6 @@ describe("contact-manifold reduction vs verbatim-Jolt gold", () => {
             const got = new Set(sel.map((c) => key(c.xA)));
             const want = new Set(cfg.keep.map((i) => key(cfg.points[i].xA as Vec3)));
             expect(got).toEqual(want);
-        });
-    }
-});
+        }
+    },
+);
