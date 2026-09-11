@@ -30,7 +30,7 @@ Or add `AvbdPlugin` to your plugin list in code. Read live poses with `Avbd.read
 ## Developing
 
 ```bash
-bun install
+bun install --frozen-lockfile
 bun run list                # installed Shallot carrier population
 bun run workflow            # regenerate the hosted surface workflow
 bun run check               # tsc + Biome + carrier declaration/drift checks
@@ -48,9 +48,7 @@ bun test ./tests/math.oracle.ts ./tests/storage.oracle.ts ./tests/coloring.oracl
   ./tests/rounded.oracle.ts
 ```
 
-`tests/differential.oracle.ts` and `tests/headless.oracle.ts` are named GPU oracles. They require a
-real WebGPU seat and must be run by path; a missing seat refuses the run rather than becoming a skip.
-The committed `shallot.json` root manifest is authoritative for the complete visible population.
+`tests/differential.oracle.ts` and `tests/headless.oracle.ts` are named GPU oracles and never enter the ordinary unit or integration sweeps. Run them directly by path to request that evidence. Their bodies need WebGPU, but the pinned carrier does not supply the `gpu` requirement, so the current direct commands refuse nonzero before the bodies run rather than passing or skipping. The committed `shallot.json` root manifest remains authoritative for the complete visible population.
 
 ### Against a local engine
 
@@ -67,7 +65,7 @@ bun link typegpu
 bun test src
 ```
 
-Run `bun install` to go back to the published engine, and `bun unlink` in both engine locations to drop the registrations.
+Run `bun install --frozen-lockfile --force` here to replace the local links with the exact Shallot and TypeGPU dependencies recorded in `bun.lock`. This restores the Git-pinned Shallot carrier, not the published peer range. To remove the global link registrations too, run `bun unlink` in the Shallot checkout and in its `node_modules/typegpu` directory.
 
 ## Releasing
 

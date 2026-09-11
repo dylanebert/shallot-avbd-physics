@@ -1,46 +1,21 @@
-// the headless lavapipe physics gate — the AVBD stack builds, steps, and reads back on the
-// software adapter `bun test` preloads, at an entity capacity its contact store fits under.
+// Named headless WebGPU build and lifecycle evidence for AVBD, Character, and Player. When a runner
+// supplies a Lavapipe-backed WebGPU environment, these bodies compile the stack, step it, and read
+// solver-owned poses through Shallot's public `probeBuffer` helper. They check finite readback,
+// closed-form falling direction, and the grounded character rest band. They are not solver-parity or
+// conformant-device evidence; Lavapipe is testing-only, and real-device parity needs separate evidence.
 //
-// What this proves (and what it deliberately does not): the physics build pipeline compiles and
-// the solver executes on a real WebGPU device headlessly, and `probeBuffer` reads a body's
-// solver-owned pose back with finite values — the de-risking probe S1 of the
-// shallot-headless-verifiability unit. It is NOT a correctness oracle: lavapipe is explicitly
-// non-conformant/testing-only, and per-step math parity against the f64 CPU oracle stays in
-// `*.oracle.ts` (CPU) + the gym `pile` scenario (real GPU). The assertions here are the
-// closed-form rung only — finite poses, a falling body strictly below its authored start after
-// a few fixed ticks (closed-form gravity direction, avbd.md "Gate where it's deterministic"
-// rung 1 — no chaos accumulates in five ticks), and a grounded character at its closed-form
-// rest height — never a number read back and tuned to.
+// `CAPACITY` is 8192 because the contact store uses about 3584 bytes per entity. Its roughly 28 MiB
+// allocation fits under a 128 MiB storage-binding limit, while the engine default capacity of 65536
+// would require roughly 235 MiB. The public `probeBuffer` helper owns command submission, staging,
+// mapping, usage validation, and alignment. `Avbd.step.bodies` is the solver's SoA buffer, and the
+// imported B_* indices keep probe offsets aligned with the solver layout.
 //
-// Why capacity 8192: the contact store sizes off the entity capacity (`eidCap × 3584 B`:
-// PAIRS_PER_BODY 8 × CONTACTS_PER_PAIR 4 × CONTACT_VEC4 7 × 16 B per eid), and lavapipe's real
-// adapter ceiling is the spec-default `maxStorageBufferBindingSize` of 128 MiB (measured, Mesa
-// 25.3.4). 8192 × 3584 B ≈ 28 MiB fits with 4.5× headroom; the engine default 65536 (~235 MiB)
-// does not — that, not a device capability, is what kept physics out of the headless roster
-// (the exclusion comment this tier deleted from `conformance-roster.ts`). `build({ capacity })`
-// is fixed at app construction (`engine/app`).
-//
-// Placement: `.oracle.ts`, decided by the measured per-arm wall clock against the 5000 ms
-// per-file cap (`tests/test-cap.ts`): cold (first run in a fresh checkout, no adapter shader
-// cache) physics 1652 ms, character 95 ms, player 150 ms, 2.30 s for the file — 54% headroom
-// under the cap, below the ~60% headroom bar that earns a `.test.ts` suffix. Warm (adapter shader cache
-// present) the file runs ~0.7 s, but the placement decision must hold for the cold worst
-// case, so it stays a named oracle. Re-run numbers are expected to vary with the host
-// (lavapipe is CPU-executed). Run by path from the shallot root:
-// `bun test ./tests/headless.oracle.ts`.
-//
-// Trigger cone (this named oracle's header is its registry): the transitive
-// import cone of this file's arms — `src/**` (plugin + PhysicsStep),
-// `src/standard/physics/**` (substrate), `src/standard/character/**` + `src/standard/player/**`
-// (sweep arms), `src/standard/{slab,mirror,input,render,transforms}/**` (declared dependencies
-// the arms build with), and `src/engine/runtime/probe.ts` (the readback seam). Re-derive from
-// the imports below if it drifts.
-//
-// The readback seam is the existing `probeBuffer` (`engine/runtime/probe.ts`) — it owns the
-// encoder/submit/staging/mapAsync chain and validates usage + alignment, so this test adds zero
-// plumbing. `Avbd.step.bodies` is the solver's SoA cols-buffer (`bodies[col * eidCap + eid]`,
-// `COPY_SRC` by construction), and the B_* column indices are imported from `step.ts` so the
-// probe offsets cannot drift from the solver's own layout.
+// Request this oracle from the AVBD repository root with
+// `bun test ./tests/headless.oracle.ts`. The current AVBD preloads install the TypeGPU transform and
+// Shallot declaration carrier only; they do not install a software adapter. Each declaration requires
+// `gpu`, and the pinned carrier has no GPU provider, so the command currently refuses nonzero before
+// the bodies run rather than passing or skipping. Ordinary unit and integration sweeps exclude
+// `.oracle.ts` files.
 
 import { expect } from "bun:test";
 import {
