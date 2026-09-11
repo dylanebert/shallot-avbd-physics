@@ -20,16 +20,16 @@
 // (the exclusion comment this tier deleted from `conformance-roster.ts`). `build({ capacity })`
 // is fixed at app construction (`engine/app`).
 //
-// Placement: `.tier.ts`, decided by the measured per-arm wall clock against the 5000 ms
+// Placement: `.oracle.ts`, decided by the measured per-arm wall clock against the 5000 ms
 // per-file cap (`tests/test-cap.ts`): cold (first run in a fresh checkout, no adapter shader
 // cache) physics 1652 ms, character 95 ms, player 150 ms, 2.30 s for the file — 54% headroom
 // under the cap, below the ~60% headroom bar that earns a `.test.ts` suffix. Warm (adapter shader cache
 // present) the file runs ~0.7 s, but the placement decision must hold for the cold worst
-// case, so it stays a by-path tier (the cap's own promotion move, 2). Re-run numbers are
-// expected to vary with the host (lavapipe is CPU-executed). Run by path from the shallot
-// root: `bun test ./tests/headless.tier.ts`.
+// case, so it stays a named oracle. Re-run numbers are expected to vary with the host
+// (lavapipe is CPU-executed). Run by path from the shallot root:
+// `bun test ./tests/headless.oracle.ts`.
 //
-// Trigger cone (a by-path tier file's header is its registry, test-cap.ts:96): the transitive
+// Trigger cone (this named oracle's header is its registry): the transitive
 // import cone of this file's arms — `src/**` (plugin + PhysicsStep),
 // `src/standard/physics/**` (substrate), `src/standard/character/**` + `src/standard/player/**`
 // (sweep arms), `src/standard/{slab,mirror,input,render,transforms}/**` (declared dependencies

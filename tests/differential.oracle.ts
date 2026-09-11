@@ -11,8 +11,8 @@ import {
 } from "../src/step";
 import { type Body, body } from "./rigid";
 
-// Trigger cone: `src/**/*.ts` and this tier's direct fixtures. Run from
-// the repo root with `bun test ./tests/differential.tier.ts`.
+// Trigger cone: `src/**/*.ts` and this oracle's direct fixtures. Run from
+// the repo root with `bun test ./tests/differential.oracle.ts`.
 // Red arm: the temporary raw TGSL integer-division mutation makes the geometry-band assertion fail
 // after compilation and execution; the focused run recorded 0 pass / 1 fail / 3 expects before restore.
 

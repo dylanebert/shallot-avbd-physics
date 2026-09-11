@@ -54,7 +54,7 @@ The committed `shallot.json` root manifest is authoritative for the complete vis
 
 ### Against a local engine
 
-`@dylanebert/shallot` is a peer and a dev dependency pinned to a published range. To test against an unreleased engine, link it and its `typegpu` too. The engine and the solver must share one typegpu instance, or struct schemas from one copy fail layout checks in the other:
+`@dylanebert/shallot` is a peer dependency on the published range `^0.9.5`; the dev dependency is pinned to the exact Git commit `github:dylanebert/shallot#1ad4d7a500c13b4a3c0422a3b09584834d5e626d`. To test against an unreleased engine, link it and its `typegpu` too. The engine and the solver must share one typegpu instance, or struct schemas from one copy fail layout checks in the other:
 
 ```bash
 # in your shallot checkout
@@ -71,7 +71,7 @@ Run `bun install` to go back to the published engine, and `bun unlink` in both e
 
 ## Releasing
 
-Bump `version` in `package.json`, commit, and push a matching `v<version>` tag. The release workflow checks, runs the oracle tests and publishes with the `NPM_TOKEN` repository secret.
+Bump `version` in `package.json`, commit, and push a matching `v<version>` tag. The release workflow runs the native `bun run check` and `bun run test` gates before publishing. Named oracle commands remain explicit evidence and are not part of the release gate.
 
 ## License
 
