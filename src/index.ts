@@ -13,7 +13,7 @@ import {
     type System,
     Time,
 } from "@dylanebert/shallot";
-import { BVH_FEATURES } from "@dylanebert/shallot/bvh/core";
+import { BVH_FEATURES } from "@dylanebert/shallot/bvh";
 import {
     type BodyState,
     bodyTraits,
@@ -24,9 +24,9 @@ import {
     springDefs,
     springSignature,
     springTraits,
-} from "@dylanebert/shallot/physics/core";
-import { BeginFrameSystem, Render } from "@dylanebert/shallot/render/core";
-import { PrepassSystem } from "@dylanebert/shallot/sear/core";
+} from "@dylanebert/shallot/physics";
+import { BeginFrameSystem, Render } from "@dylanebert/shallot/render";
+import { PrepassSystem } from "@dylanebert/shallot/sear";
 import { packHulls } from "./hull";
 import { diffStamps } from "./recycle";
 import { B_POS, B_QUAT, B_VELL, type Inputs, PENALTY_MIN, PhysicsStep } from "./step";

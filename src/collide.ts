@@ -32,8 +32,8 @@
 // while the scoped CPU arm reads the exact packed `Uint32Array`. Neither CPU arm can see f32
 // reassociation (it runs on f64 JS numbers), so the emitted-WGSL differential stays the guard for op order.
 
-import { UNIT_CUBE_ID } from "@dylanebert/shallot/physics/core";
-import { chunk, spliceNs } from "@dylanebert/shallot/utils/core";
+import { UNIT_CUBE_ID } from "@dylanebert/shallot/physics";
+import { chunk, spliceNs } from "@dylanebert/shallot/utils";
 import tgpu from "typegpu";
 import * as d from "typegpu/data";
 import * as std from "typegpu/std";

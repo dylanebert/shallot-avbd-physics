@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type Hull, Hulls, UNIT_CUBE_ID } from "@dylanebert/shallot/physics/core";
+import { type Hull, Hulls, UNIT_CUBE_ID } from "@dylanebert/shallot/physics";
 import { HULL_FACE_STRIDE, HULL_HEADER, packHulls } from "../src/hull";
 import { boxHull, tetHull } from "./hull";
 
