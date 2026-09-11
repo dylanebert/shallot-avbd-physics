@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { expect } from "bun:test";
+import { check } from "@dylanebert/shallot/harness/check";
 import { joint } from "./joint";
 import { body, massOf } from "./rigid";
 import { makeSolver, step } from "./solver";
@@ -18,8 +19,14 @@ import { makeSolver, step } from "./solver";
 
 const dt = 1 / 60;
 
-describe("AVBD oracle — angular motor (the force-clamped 1-DOF drive)", () => {
-    test("a motor spins a free rotor up to its target ω and holds it", () => {
+check(
+    "a motor spins a free rotor up to its target ω and holds it",
+    {
+        claim: "angular motor reaches and holds its target speed",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // A unit box pinned at its COM by a world spherical joint (rotation free) + a Y motor, no gravity. The
         // motor (non-binding clamp) drives the spin to `speed` and holds it — the steady state where C → 0.
         const speed = 5;
@@ -42,9 +49,17 @@ describe("AVBD oracle — angular motor (the force-clamped 1-DOF drive)", () => 
         // (> a full turn) — both red without the motor term (velAng ≈ 0, swept ≈ 0)
         expect(rotor.velAng[1]).toBeCloseTo(speed, 1);
         expect(swept).toBeGreaterThan(2 * Math.PI);
-    });
+    },
+);
 
-    test("the torque clamp bounds the spin-up rate at maxTorque / I", () => {
+check(
+    "the torque clamp bounds the spin-up rate at maxTorque / I",
+    {
+        claim: "angular motor torque clamp bounds spin-up acceleration",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // Same rotor, but a SMALL clamp. While behind target the force saturates at maxTorque, so the angular
         // accel is α = maxTorque / I_y (constant) and ω(t) ≈ α·t until it nears `speed`. Pins the clamp.
         const speed = 5;
@@ -70,9 +85,17 @@ describe("AVBD oracle — angular motor (the force-clamped 1-DOF drive)", () => 
         expect(rotor.velAng[1]).toBeLessThan(speed * 0.5);
         expect(rotor.velAng[1]).toBeGreaterThan(alpha * t * 0.85);
         expect(rotor.velAng[1]).toBeLessThan(alpha * t * 1.15);
-    });
+    },
+);
 
-    test("against a gravity load the clamp decides lap (strong) vs stall (weak) — sceneMotor", () => {
+check(
+    "against a gravity load the clamp decides lap (strong) vs stall (weak) — sceneMotor",
+    {
+        claim: "motor torque separates gravity-loaded lap and stall",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // A bar pinned at one end (world spherical), motored about Z against gravity (the reference scene). Peak
         // gravity torque is τg = m·g·(L/2) at horizontal. A clamp above τg drives the bar over the top and laps;
         // a clamp below τg can't lift past the gravity balance, so it stalls (never completes a revolution). The
@@ -107,9 +130,17 @@ describe("AVBD oracle — angular motor (the force-clamped 1-DOF drive)", () => 
         expect(run(2 * tauG)).toBeGreaterThan(2 * Math.PI);
         // weak (0.4·τg < τg): stalls — never completes a revolution (bounded oscillation about the balance)
         expect(run(0.4 * tauG)).toBeLessThan(Math.PI);
-    });
+    },
+);
 
-    test("a motor between two free bodies drives their relative ω, splitting it equal-and-opposite", () => {
+check(
+    "a motor between two free bodies drives their relative ω, splitting it equal-and-opposite",
+    {
+        claim: "two-body motor preserves relative speed and momentum split",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // Both endpoints dynamic (a hinge motor, the two-body path the world-anchor tests never reach: isA both
         // ways + the a-side increment). Two identical free rotors, gravity off, joined by a pure Y motor
         // (stiffnessLin 0 — no linear pin). With no other angular constraint the motor drives (ω_b − ω_a) to
@@ -135,5 +166,5 @@ describe("AVBD oracle — angular motor (the force-clamped 1-DOF drive)", () => 
         // BDF1 quaternion integrator's small-angle ω bleed (physics.md "residual ω decay"), asymmetric here.
         expect(a.velAng[1] + b.velAng[1]).toBeCloseTo(0, 1);
         expect(b.velAng[1]).toBeCloseTo(speed / 2, 1);
-    });
-});
+    },
+);

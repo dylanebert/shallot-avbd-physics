@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { expect } from "bun:test";
 // the shipped runtime CPU sweep (src) — the third tier beside this f64 oracle (the spec) and the GPU
 // character pass; validated against the oracle here exactly as the GPU pass is gated against it in the gym.
 import {
@@ -8,6 +8,7 @@ import {
     type SweepDiag,
     sweepCharacter,
 } from "@dylanebert/shallot/character";
+import { check } from "@dylanebert/shallot/harness/check";
 import { type Character, character, moveCharacter } from "./character";
 import { boxHull } from "./hull";
 import { length, type Quat, scale, sub, type Vec3 } from "./math";
@@ -274,8 +275,14 @@ function scenes(): LockScene[] {
     return out;
 }
 
-describe("CPU character sweep — per-step parity vs the f64 oracle (single-step injection)", () => {
-    test("pose / velocity / grounded match across the behavioral scenes", () => {
+check(
+    "pose / velocity / grounded match across the behavioral scenes",
+    {
+        claim: "CPU character sweep matches f64 oracle across bounded scenes",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         let mp = 0;
         let mv = 0;
         let mpush = 0;
@@ -296,13 +303,15 @@ describe("CPU character sweep — per-step parity vs the f64 oracle (single-step
         expect(mp).toBeLessThan(POS_TOL);
         expect(mv).toBeLessThan(VEL_TOL);
         expect(mpush).toBeLessThan(VEL_TOL);
-    });
-});
+    },
+);
 
 // ── behavioral semantics: the sweep run ALONE reproduces the oracle's slide / step / jump invariants ───
 
-describe("CPU character sweep — behavioral semantics (free-run)", () => {
-    test("drop-to-rest: settles on the floor, grounded, no residual jitter", () => {
+check(
+    "drop-to-rest: settles on the floor, grounded, no residual jitter",
+    { claim: "CPU character sweep settles on the floor", size: "integration", budget: 20000 },
+    () => {
         const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 3, 0])));
         const ss = [sweepBody(ground([0, 0, 0]))];
         for (let f = 0; f < 200; f++) sweepCharacter(sc, [0, 0, 0], ss, G, DT);
@@ -312,9 +321,17 @@ describe("CPU character sweep — behavioral semantics (free-run)", () => {
         expect(Math.abs(sc.pos[1] - restY)).toBeLessThan(0.03);
         expect(sc.grounded).toBe(true);
         expect(length(sc.realizedVel)).toBeLessThan(1e-3);
-    });
+    },
+);
 
-    test("slope: 30° holds (walkable), 60° slides (too steep)", () => {
+check(
+    "slope: 30° holds (walkable), 60° slides (too steep)",
+    {
+        claim: "CPU character sweep separates walkable and steep slopes",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         const slide = (deg: number): number => {
             const a = (deg * Math.PI) / 180;
             const n: Vec3 = [-Math.sin(a), Math.cos(a), 0];
@@ -334,9 +351,17 @@ describe("CPU character sweep — behavioral semantics (free-run)", () => {
         expect(shallow).toBeLessThan(0.1);
         expect(steep).toBeGreaterThan(1.0);
         expect(steep).toBeGreaterThan(shallow * 10);
-    });
+    },
+);
 
-    test("step-up climbs a sub-radius step; a tall wall stops the char (bounded, no jitter)", () => {
+check(
+    "step-up climbs a sub-radius step; a tall wall stops the char (bounded, no jitter)",
+    {
+        claim: "CPU character sweep climbs steps and stops at walls",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // step-up onto the plateau (near face x = 3)
         const climber = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0])));
         const stepStatics = [
@@ -373,9 +398,13 @@ describe("CPU character sweep — behavioral semantics (free-run)", () => {
         expect(blocked.pos[0]).toBeGreaterThan(2 - RADIUS - 0.1); // stops at the surface
         expect(maxX - minX).toBeLessThan(1e-3); // no jitter
         expect(Math.abs(blocked.pos[1] - restY)).toBeLessThan(0.05); // still on the floor (didn't climb)
-    });
+    },
+);
 
-    test("jump: spam → single jump per landing, bounded apex (no double-jump)", () => {
+check(
+    "jump: spam → single jump per landing, bounded apex (no double-jump)",
+    { claim: "CPU character sweep bounds repeated jump input", size: "integration", budget: 20000 },
+    () => {
         const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0]), 50, JUMP));
         const ss = [sweepBody(ground([0, 0, 0]))];
         let maxY = Number.NEGATIVE_INFINITY;
@@ -393,9 +422,17 @@ describe("CPU character sweep — behavioral semantics (free-run)", () => {
         expect(jumps).toBeLessThan(10); // NOT every frame — single jump per cycle
         expect(maxY).toBeLessThan(apex + 0.4); // bounded near one jump's apex
         expect(maxY).toBeGreaterThan(restY + 0.8); // clearly left the ground
-    });
+    },
+);
 
-    test("coyote: a jump pressed just after walking off a ledge still fires", () => {
+check(
+    "coyote: a jump pressed just after walking off a ledge still fires",
+    {
+        claim: "CPU character sweep preserves coyote jump timing",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0.5, restY, 0]), 50, JUMP));
         const ss = [sweepBody(body([2, 1, 4], 0, 0.8, [0, 0, 0]))]; // platform x ∈ [-1, 1]
         let leftAt = -1;
@@ -410,9 +447,17 @@ describe("CPU character sweep — behavioral semantics (free-run)", () => {
         console.log(`[char-sweep] coyote — left at frame ${leftAt}, coyote jump ${coyoteJumped}`);
         expect(leftAt).toBeGreaterThan(0); // walked off the ledge (grounded lapsed)
         expect(coyoteJumped).toBe(true); // the jump fired within the coyote window despite being airborne
-    });
+    },
+);
 
-    test("buffer: a jump pressed just before landing fires on touchdown", () => {
+check(
+    "buffer: a jump pressed just before landing fires on touchdown",
+    {
+        claim: "CPU character sweep preserves buffered touchdown jumps",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         const sc = charState(
             character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY + 0.4, 0]), 50, JUMP),
         );
@@ -430,42 +475,47 @@ describe("CPU character sweep — behavioral semantics (free-run)", () => {
         );
         expect(buffered).toBe(true); // the press happened while airborne + descending
         expect(bufferJumped).toBe(true); // fired on/just after landing (the buffer carried it)
-    });
-});
+    },
+);
 
 // ── gather: the sphere cull is a contact-set-preserving superset ───────────────────────────────────────
 
-describe("CPU character sweep — gather (cull == brute, diagnostics)", () => {
-    // far filler statics in a ring — gathered by neither phase, probed only by the brute run
-    const fillers = (n: number, r: number): Body[] => {
-        const out: Body[] = [];
-        for (let i = 0; i < n; i++) {
-            const a = (i / n) * Math.PI * 2;
-            out.push(body([1, 1, 1], 0, 0.8, [Math.cos(a) * r, 1 + (i % 5), Math.sin(a) * r]));
-        }
-        return out;
-    };
+// far filler statics in a ring — gathered by neither phase, probed only by the brute run
+const fillers = (n: number, r: number): Body[] => {
+    const out: Body[] = [];
+    for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        out.push(body([1, 1, 1], 0, 0.8, [Math.cos(a) * r, 1 + (i % 5), Math.sin(a) * r]));
+    }
+    return out;
+};
 
-    // run a scene culled and brute, frame-locked, returning the max pose+velocity divergence (expect 0 exact)
-    const divergence = (
-        mk: () => { sc: CharState; ss: SweepBody[]; sp: SweepBody[]; input: Vec3 },
-        frames: number,
-        jumpAt = -1,
-    ): number => {
-        const a = mk();
-        const b = mk();
-        let max = 0;
-        for (let f = 0; f < frames; f++) {
-            sweepCharacter(a.sc, a.input, a.ss, G, DT, f === jumpAt, a.sp);
-            sweepCharacter(b.sc, b.input, b.ss, G, DT, f === jumpAt, b.sp, { cull: false });
-            max = Math.max(max, dist(a.sc.pos, b.sc.pos), dist(a.sc.realizedVel, b.sc.realizedVel));
-            for (let i = 0; i < a.sp.length; i++)
-                max = Math.max(max, dist(a.sp[i].vel, b.sp[i].vel));
-        }
-        return max;
-    };
+// run a scene culled and brute, frame-locked, returning the max pose+velocity divergence (expect 0 exact)
+const divergence = (
+    mk: () => { sc: CharState; ss: SweepBody[]; sp: SweepBody[]; input: Vec3 },
+    frames: number,
+    jumpAt = -1,
+): number => {
+    const a = mk();
+    const b = mk();
+    let max = 0;
+    for (let f = 0; f < frames; f++) {
+        sweepCharacter(a.sc, a.input, a.ss, G, DT, f === jumpAt, a.sp);
+        sweepCharacter(b.sc, b.input, b.ss, G, DT, f === jumpAt, b.sp, { cull: false });
+        max = Math.max(max, dist(a.sc.pos, b.sc.pos), dist(a.sc.realizedVel, b.sc.realizedVel));
+        for (let i = 0; i < a.sp.length; i++) max = Math.max(max, dist(a.sp[i].vel, b.sp[i].vel));
+    }
+    return max;
+};
 
-    test("cull == brute, bit-exact, across the behavioral scene shapes", () => {
+check(
+    "cull == brute, bit-exact, across the behavioral scene shapes",
+    {
+        claim: "CPU character sweep cull matches brute behavioral scenes",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         const stepUp = divergence(
             () => ({
                 sc: charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0]))),
@@ -498,9 +548,17 @@ describe("CPU character sweep — gather (cull == brute, diagnostics)", () => {
         );
         expect(stepUp).toBe(0); // bit-identical — the cull never changes the contact set
         expect(pushScene).toBe(0);
-    });
+    },
+);
 
-    test("far bodies culled / overflow flagged / guard tripped", () => {
+check(
+    "far bodies culled / overflow flagged / guard tripped",
+    {
+        claim: "CPU character sweep reports gather cull overflow and guard",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         const diag = (): SweepDiag => ({ candidates: 0, overflow: false, guard: false });
 
         // far ring fully culled — only the floor survives
@@ -564,5 +622,5 @@ describe("CPU character sweep — gather (cull == brute, diagnostics)", () => {
             expect(d.guard).toBe(true);
             expect(sc.pos.every(Number.isFinite)).toBe(true);
         }
-    });
-});
+    },
+);

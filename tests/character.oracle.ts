@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { expect } from "bun:test";
+import { check } from "@dylanebert/shallot/harness/check";
 import { character, type MoveDiag, moveCharacter } from "./character";
 import { length, type Quat, sub, type Vec3 } from "./math";
 import { type Body, body, capsule, massOf } from "./rigid";
@@ -24,8 +25,10 @@ const qz = (rad: number): Quat => [0, 0, Math.sin(rad / 2), Math.cos(rad / 2)];
 const ground = (pos: Vec3, quat: Quat = [0, 0, 0, 1]) =>
     body([40, 1, 40], 0, 0.8, pos, [0, 0, 0], quat);
 
-describe("AVBD character — collide-and-slide sweep", () => {
-    test("drop-to-rest: a capsule falls and settles with its surface on flat ground, grounded", () => {
+check(
+    "drop-to-rest: a capsule falls and settles with its surface on flat ground, grounded",
+    { claim: "character capsule settles on flat ground", size: "integration", budget: 20000 },
+    () => {
         const floor = ground([0, 0, 0]); // top at y = 0.5
         const ch = character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 3, 0]));
         for (let f = 0; f < 200; f++) moveCharacter(ch, [0, 0, 0], [floor], G, DT);
@@ -38,9 +41,17 @@ describe("AVBD character — collide-and-slide sweep", () => {
         expect(Math.abs(ch.body.posLin[1] - restY)).toBeLessThan(0.03); // settles at the surface, no sink
         expect(ch.grounded).toBe(true);
         expect(length(ch.body.velLin)).toBeLessThan(1e-3); // at rest — no residual jitter
-    });
+    },
+);
 
-    test("slope-limit: holds on a walkable slope (30° < 45° cutoff), slides on a too-steep one (60°)", () => {
+check(
+    "slope-limit: holds on a walkable slope (30° < 45° cutoff), slides on a too-steep one (60°)",
+    {
+        claim: "character slope limit separates walkable hold from slide",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // maxSlope 45° → cos 0.707. A 30° slope (normal.y = cos30 = 0.866 > cutoff) is walkable: the char
         // grounds, gravity stops accumulating, it holds. A 60° slope (normal.y = cos60 = 0.5 < cutoff) is
         // not walkable: the char never grounds, gravity keeps building, it slides down-slope. The slide is
@@ -65,9 +76,17 @@ describe("AVBD character — collide-and-slide sweep", () => {
         expect(shallow).toBeLessThan(0.1); // walkable: holds
         expect(steep).toBeGreaterThan(1.0); // too steep: slides far
         expect(steep).toBeGreaterThan(shallow * 10);
-    });
+    },
+);
 
-    test("step-up: the rounded bottom climbs a sub-radius step but a tall wall stops it (bounded, no jitter)", () => {
+check(
+    "step-up: the rounded bottom climbs a sub-radius step but a tall wall stops it (bounded, no jitter)",
+    {
+        claim: "rounded character climbs sub-radius steps and stops at tall walls",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         const floor = ground([0, 0, 0]); // top at y = 0.5
         const restY = 0.5 + REST_OFFSET; // 1.3 on the floor
 
@@ -107,11 +126,17 @@ describe("AVBD character — collide-and-slide sweep", () => {
         expect(blocked.body.posLin[0]).toBeGreaterThan(2 - RADIUS - 0.1); // stops at the surface, not pushed away
         expect(maxX - minX).toBeLessThan(1e-3); // no jitter — the contact is bounded, settled
         expect(Math.abs(blocked.body.posLin[1] - restY)).toBeLessThan(0.05); // still on the floor (didn't climb)
-    });
-});
+    },
+);
 
-describe("AVBD character — the kinematic-pushing fix through the full solver", () => {
-    test("a kinematic capsule driven into a static wall stays bounded (no escalation, no tunnel, no jitter)", () => {
+check(
+    "a kinematic capsule driven into a static wall stays bounded (no escalation, no tunnel, no jitter)",
+    {
+        claim: "kinematic character wall contact stays bounded in the solver",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // The §6.4 headline, end to end: the character is a mass ≤ 0 capsule in the solver's body list, its
         // controller driving it straight into a static wall. The controller's sweep stops it at the wall
         // surface; the AVBD then generates the char–wall AND char–floor contacts — both all-static (mass ≤ 0
@@ -154,14 +179,20 @@ describe("AVBD character — the kinematic-pushing fix through the full solver",
         expect(box.posLin.every(Number.isFinite)).toBe(true);
         expect(Math.hypot(box.posLin[0] - -3, box.posLin[1] - 1.0)).toBeLessThan(0.1);
         expect(length(box.velLin)).toBeLessThan(0.05);
-    });
-});
+    },
+);
 
-describe("AVBD character — moving-platform carry", () => {
-    // the char riding a translating kinematic platform tracks it (legacy charMove += groundVelocity): the
-    // controller reads the supporting body's velocity and adds it to its own motion. A true static has
-    // velLin 0, so a flat floor never carries — only a body the scene is actively moving.
-    test("rides a horizontally translating platform (tracks its x)", () => {
+// the char riding a translating kinematic platform tracks it (legacy charMove += groundVelocity): the
+// controller reads the supporting body's velocity and adds it to its own motion. A true static has
+// velLin 0, so a flat floor never carries — only a body the scene is actively moving.
+check(
+    "rides a horizontally translating platform (tracks its x)",
+    {
+        claim: "character carries horizontally with a moving platform",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         const V = 1.5; // platform speed m/s
         // a wide flat kinematic platform (mass 0) moving +x; top at y = 0.5. The scene advances its pose
         // each step (as a PlatformSystem does), and its velLin carries the rider.
@@ -177,9 +208,17 @@ describe("AVBD character — moving-platform carry", () => {
         expect(ch.grounded).toBe(true);
         // tracks the platform: without carry the char stays at x≈0 while the platform slides to ~2.25
         expect(Math.abs(ch.body.posLin[0] - platform.posLin[0])).toBeLessThan(0.1);
-    });
+    },
+);
 
-    test("a descending platform produces the carry's realized velocity (snap alone leaves it 0)", () => {
+check(
+    "a descending platform produces the carry's realized velocity (snap alone leaves it 0)",
+    {
+        claim: "character realizes descending platform carry velocity",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // vertical POSITION tracking is masked by the ground snap (within its band the snap glues the char
         // down each step even without carry), so the carry's isolable vertical effect is the REALIZED velocity
         // it writes — (swept − start)/dt, computed before the snap. Without carry that's 0 (the char looks
@@ -197,11 +236,17 @@ describe("AVBD character — moving-platform carry", () => {
         );
         expect(ch.grounded).toBe(true);
         expect(ch.body.velLin[1]).toBeCloseTo(-V, 1); // the carry's realized descent — 0 without the carry
-    });
-});
+    },
+);
 
-describe("AVBD character — full-speed push (velocity transfer)", () => {
-    test("shoves a light box ahead at walking speed without overtaking it", () => {
+check(
+    "shoves a light box ahead at walking speed without overtaking it",
+    {
+        claim: "character transfers walking speed to a pushed box",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // a char at the floor walks +x at 3 m/s into a light box ahead of it. The box is NOT swept against
         // (it's dynamic, passed in `push`, not `statics`), so without velocity transfer the char tunnels
         // through it (the soft solver contact only carries the box at ~0.4 m/s, far under 3). The transfer
@@ -221,9 +266,17 @@ describe("AVBD character — full-speed push (velocity transfer)", () => {
         expect(box.posLin.every(Number.isFinite)).toBe(true);
         expect(box.posLin[0]).toBeGreaterThan(3); // the box was shoved well forward (not left at ~1.2)
         expect(cap.posLin[0]).toBeLessThan(box.posLin[0]); // the char stayed BEHIND it — no overtake/tunnel
-    });
+    },
+);
 
-    test("walking into a dynamic box's side is blocked at the face — never pops on top", () => {
+check(
+    "walking into a dynamic box's side is blocked at the face — never pops on top",
+    {
+        claim: "dynamic box side contact blocks character without vertical pop",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // the report: walking into a chest-high dynamic crate teleported the char on top of it. The old sweep
         // skipped every non-walkable dynamic contact, so the capsule penetrated the side freely; once deep
         // enough the closest-point MTV flipped to the box's TOP face (walkable), and the sweep ejected the
@@ -246,9 +299,17 @@ describe("AVBD character — full-speed push (velocity transfer)", () => {
         expect(maxX).toBeLessThan(1 - RADIUS + 0.02); // stopped at the face — never tunneled into/through it
         expect(maxY).toBeLessThan(1.3 + 0.06); // stayed at floor rest — never ejected onto the box top (2.3)
         expect(box.velLin[0]).toBeGreaterThan(2.9); // the full-speed push still drives the box at the char's pace
-    });
+    },
+);
 
-    test("jumping into a tall dynamic box's side slides off — never lands on top", () => {
+check(
+    "jumping into a tall dynamic box's side slides off — never lands on top",
+    {
+        claim: "airborne dynamic box side contact slides without top landing",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // the report's other shape: jumping into a dynamic body went through it and landed on top. With side
         // contacts excluded from the sweep, the airborne capsule sank into the face until the MTV flipped
         // upward. Fixed, the side blocks like a static wall: the char rises along the face, falls back, and
@@ -270,9 +331,17 @@ describe("AVBD character — full-speed push (velocity transfer)", () => {
         expect(maxY).toBeLessThan(2.55 + 0.06); // never above the jump apex — no upward ejection
         expect(Math.abs(ch.body.posLin[1] - 1.3)).toBeLessThan(0.03); // back at floor rest, beside the box
         expect(ch.grounded).toBe(true);
-    });
+    },
+);
 
-    test("stands ON a dynamic box (a walkable contact supports it) instead of sinking through", () => {
+check(
+    "stands ON a dynamic box (a walkable contact supports it) instead of sinking through",
+    {
+        claim: "walkable dynamic box contact supports the character",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // the regression: a char dropped onto a DYNAMIC box (passed in `push`, like the full-speed shove) fell
         // straight through to the floor — the sweep depenetrated only against statics, so nothing held it up on
         // a box. A box the char stands ON is a WALKABLE contact (normal up), so the sweep must push the char up
@@ -294,51 +363,57 @@ describe("AVBD character — full-speed push (velocity transfer)", () => {
         expect(ch.grounded).toBe(true); // standing on the box counts as ground (can jump off it)
         expect(length(ch.body.velLin)).toBeLessThan(1e-3); // settled — no residual jitter
         expect(length(box.velLin)).toBe(0); // down-cancel: landing never hammers the box down at fall speed
-    });
-});
+    },
+);
 
-describe("AVBD character — candidate cull (the gather)", () => {
-    // The sphere cull is a contact-set-preserving superset: every phase gates on gap < GROUND_SNAP or
-    // depth > 0, and a culled body's gap stays above GROUND_SNAP at every pose the tick visits, so the
-    // culled run is BIT-IDENTICAL to the brute one (every filler contribution sits behind a conditional
-    // that fails). The GPU runs the same predicate; these gates pin the oracle half of GPU == oracle.
+// The sphere cull is a contact-set-preserving superset: every phase gates on gap < GROUND_SNAP or
+// depth > 0, and a culled body's gap stays above GROUND_SNAP at every pose the tick visits, so the
+// culled run is BIT-IDENTICAL to the brute one (every filler contribution sits behind a conditional
+// that fails). The GPU runs the same predicate; these gates pin the oracle half of GPU == oracle.
 
-    const diag = (): MoveDiag => ({ candidates: 0, overflow: false, guard: false });
+const diag = (): MoveDiag => ({ candidates: 0, overflow: false, guard: false });
 
-    // far filler statics in a ring — gathered by neither side's contact set, probed only by brute
-    const fillers = (n: number, r: number): Body[] => {
-        const out: Body[] = [];
-        for (let i = 0; i < n; i++) {
-            const a = (i / n) * Math.PI * 2;
-            out.push(body([1, 1, 1], 0, 0.8, [Math.cos(a) * r, 1 + (i % 5), Math.sin(a) * r]));
-        }
-        return out;
-    };
+// far filler statics in a ring — gathered by neither side's contact set, probed only by brute
+const fillers = (n: number, r: number): Body[] => {
+    const out: Body[] = [];
+    for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        out.push(body([1, 1, 1], 0, 0.8, [Math.cos(a) * r, 1 + (i % 5), Math.sin(a) * r]));
+    }
+    return out;
+};
 
-    // run the same scene culled and brute, frame-locked; return the max |pos| divergence (expect 0 exact)
-    const divergence = (
-        mk: () => { ch: ReturnType<typeof character>; statics: Body[]; push: Body[]; input: Vec3 },
-        frames: number,
-        jumpAt = -1,
-    ): number => {
-        const a = mk();
-        const b = mk();
-        let max = 0;
-        for (let f = 0; f < frames; f++) {
-            moveCharacter(a.ch, a.input, a.statics, G, DT, f === jumpAt, a.push);
-            moveCharacter(b.ch, b.input, b.statics, G, DT, f === jumpAt, b.push, { cull: false });
-            max = Math.max(
-                max,
-                length(sub(a.ch.body.posLin, b.ch.body.posLin)),
-                length(sub(a.ch.body.velLin, b.ch.body.velLin)),
-            );
-            for (let i = 0; i < a.push.length; i++)
-                max = Math.max(max, length(sub(a.push[i].velLin, b.push[i].velLin)));
-        }
-        return max;
-    };
+// run the same scene culled and brute, frame-locked; return the max |pos| divergence (expect 0 exact)
+const divergence = (
+    mk: () => { ch: ReturnType<typeof character>; statics: Body[]; push: Body[]; input: Vec3 },
+    frames: number,
+    jumpAt = -1,
+): number => {
+    const a = mk();
+    const b = mk();
+    let max = 0;
+    for (let f = 0; f < frames; f++) {
+        moveCharacter(a.ch, a.input, a.statics, G, DT, f === jumpAt, a.push);
+        moveCharacter(b.ch, b.input, b.statics, G, DT, f === jumpAt, b.push, { cull: false });
+        max = Math.max(
+            max,
+            length(sub(a.ch.body.posLin, b.ch.body.posLin)),
+            length(sub(a.ch.body.velLin, b.ch.body.velLin)),
+        );
+        for (let i = 0; i < a.push.length; i++)
+            max = Math.max(max, length(sub(a.push[i].velLin, b.push[i].velLin)));
+    }
+    return max;
+};
 
-    test("cull equivalence: culled == brute, exact f64, across the behavioral scene shapes", () => {
+check(
+    "cull equivalence: culled == brute, exact f64, across the behavioral scene shapes",
+    {
+        claim: "character cull preserves bounded behavioral scene results",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         const restY = 0.5 + REST_OFFSET;
         // step-up + walk among far fillers (slide + snap + grounded paths). The cull is
         // contact-set-preserving, so culled == brute holds at any filler count — a handful of culled
@@ -395,9 +470,17 @@ describe("AVBD character — candidate cull (the gather)", () => {
         expect(stepUp).toBe(0); // bit-identical — the cull never changes the contact set
         expect(pushScene).toBe(0);
         expect(carry).toBe(0);
-    });
+    },
+);
 
-    test("cull equivalence: seeded randomized sweep (near + far bodies, random input)", () => {
+check(
+    "cull equivalence: seeded randomized sweep (near + far bodies, random input)",
+    {
+        claim: "seeded character cull preserves randomized sweep results",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         let seed = 0; // re-seeded by mk, so both runs build the identical scene
         const rnd = () => {
             seed = (seed * 1664525 + 1013904223) >>> 0;
@@ -426,9 +509,13 @@ describe("AVBD character — candidate cull (the gather)", () => {
         const max = divergence(mk, 120);
         console.log(`[character/cull] random sweep divergence ${max.toExponential(1)}`);
         expect(max).toBe(0);
-    });
+    },
+);
 
-    test("far bodies are culled (the gather actually culls)", () => {
+check(
+    "far bodies are culled (the gather actually culls)",
+    { claim: "character gather culls far bodies", size: "integration", budget: 20000 },
+    () => {
         const d = diag();
         const ch = character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 1.3, 0]));
         moveCharacter(ch, [1, 0, 0], [ground([0, 0, 0]), ...fillers(500, 30)], G, DT, false, [], {
@@ -437,9 +524,17 @@ describe("AVBD character — candidate cull (the gather)", () => {
         console.log(`[character/cull] candidates ${d.candidates} of 501`);
         expect(d.candidates).toBe(1); // only the floor — every ring body rejected by the sphere
         expect(d.overflow).toBe(false);
-    });
+    },
+);
 
-    test("re-gather: a fast platform's carry widens the band to include a body the provisional gather missed", () => {
+check(
+    "re-gather: a fast platform's carry widens the band to include a body the provisional gather missed",
+    {
+        claim: "character re-gather includes bodies reached by platform carry",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // provisional band (groundVel unknown) keeps a small box only within ~1.96 m; the platform carry
         // (60 m/s → 1 m/tick) raises the full band past 2.4 m. Without the re-gather the box would stay
         // culled while the carry could sweep the char into it — the gate asserts it lands in the set.
@@ -450,9 +545,17 @@ describe("AVBD character — candidate cull (the gather)", () => {
         moveCharacter(ch, [0, 0, 0], [platform, box], G, DT, false, [], { diag: d });
         console.log(`[character/cull] re-gather candidates ${d.candidates} (platform + box)`);
         expect(d.candidates).toBe(2); // the re-gather pulled the box in; provisional alone keeps only the platform
-    });
+    },
+);
 
-    test("overflow: >64 candidates keeps the first 64 in scan order and flags loudly", () => {
+check(
+    "overflow: >64 candidates keeps the first 64 in scan order and flags loudly",
+    {
+        claim: "character gather reports and preserves its bounded overflow policy",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         let seed = 7;
         const rnd = () => {
             seed = (seed * 1664525 + 1013904223) >>> 0;
@@ -493,9 +596,17 @@ describe("AVBD character — candidate cull (the gather)", () => {
         );
         expect(overflowed).toBe(true);
         expect(div).toBe(0); // the cap policy IS "first 64 in scan order" — pinned so the GPU can mirror it
-    });
+    },
+);
 
-    test("guard: spawning deep inside geometry trips the displacement guard, stays finite", () => {
+check(
+    "guard: spawning deep inside geometry trips the displacement guard, stays finite",
+    {
+        claim: "character displacement guard refuses deep geometry escape",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         const d = diag();
         const ch = character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 0, 0]));
         moveCharacter(ch, [0, 0, 0], [body([4, 4, 4], 0, 0.8, [0, 0, 0])], G, DT, false, [], {
@@ -506,14 +617,20 @@ describe("AVBD character — candidate cull (the gather)", () => {
         );
         expect(d.guard).toBe(true); // the band budget was exceeded — loud, never silent
         expect(ch.body.posLin.every(Number.isFinite)).toBe(true);
-    });
-});
+    },
+);
 
-describe("AVBD character — jump (single jump, buffering, coyote)", () => {
-    const Jump = 5; // launch speed → apex = JUMP²/(2|G|) = 1.25 m above the launch
-    const restY = 0.5 + REST_OFFSET; // 1.3 on the floor
+const Jump = 5; // launch speed → apex = JUMP²/(2|G|) = 1.25 m above the launch
+const restY = 0.5 + REST_OFFSET; // 1.3 on the floor
 
-    test("spam jump: one jump per landing, never double-jumps (bounded apex)", () => {
+check(
+    "spam jump: one jump per landing, never double-jumps (bounded apex)",
+    {
+        claim: "character jump input permits one bounded jump per landing",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // holding/spamming the jump button must yield a SINGLE jump per ground contact — the coyote credit is
         // consumed on launch and won't refill until the next landing. A double-jump (re-firing mid-air on the
         // held press) would gain height every airborne frame and fly away unbounded; a single jump arcs to a
@@ -536,9 +653,17 @@ describe("AVBD character — jump (single jump, buffering, coyote)", () => {
         expect(jumps).toBeLessThan(10); // NOT every frame — single jump per cycle (a held button can't re-fire)
         expect(maxY).toBeLessThan(apex + 0.4); // bounded near one jump's apex (a double-jump would exceed it)
         expect(maxY).toBeGreaterThan(restY + 0.8); // it clearly left the ground
-    });
+    },
+);
 
-    test("coyote: a jump pressed just after walking off a ledge still fires", () => {
+check(
+    "coyote: a jump pressed just after walking off a ledge still fires",
+    {
+        claim: "character coyote jump fires after leaving a ledge",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
         // a small platform (top y 0.5, +x edge at x = 1); walk +x off it. A jump pressed on the first airborne
         // frame after the ledge fires (coyote credit hasn't decayed), even though the character isn't grounded.
         const plat = body([2, 1, 4], 0, 0.8, [0, 0, 0]); // x ∈ [-1, 1]
@@ -557,9 +682,13 @@ describe("AVBD character — jump (single jump, buffering, coyote)", () => {
         );
         expect(leftAt).toBeGreaterThan(0); // it walked off the ledge (grounded lapsed)
         expect(coyoteJumped).toBe(true); // the jump fired within the coyote window despite being airborne
-    });
+    },
+);
 
-    test("buffer: a jump pressed just before landing fires on touchdown", () => {
+check(
+    "buffer: a jump pressed just before landing fires on touchdown",
+    { claim: "character jump buffer fires on touchdown", size: "integration", budget: 20000 },
+    () => {
         // drop the capsule a short way; press jump ONCE while descending close to the ground (a few frames
         // before landing), then release. The buffered press must survive to touchdown and fire the jump there —
         // without buffering it would be swallowed (pressed mid-air, not grounded) and the character would just settle.
@@ -579,5 +708,5 @@ describe("AVBD character — jump (single jump, buffering, coyote)", () => {
         );
         expect(buffered).toBe(true); // the press happened while still airborne + descending
         expect(bufferJumped).toBe(true); // it fired on/just after landing (the buffer carried it)
-    });
-});
+    },
+);

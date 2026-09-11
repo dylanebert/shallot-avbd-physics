@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { expect } from "bun:test";
+import { check } from "@dylanebert/shallot/harness/check";
 import {
     BAND_ENERGY_EXCESS,
     BAND_PENETRATION,
@@ -54,23 +55,31 @@ function run(sc: Scene, iterations: number) {
 // degradation: every topology must stay stable + settle with fewer-than-validation iterations. iters=8,
 // not lower, because the 8:1-mass-ratio mixed-sizes bridge needs iters≥6 to converge (the iteration
 // floor for high mass ratios, same family as the tall-chain floor — physics.md "f32 precision").
-describe.each([10, 8])("AVBD oracle — topology stability corpus (iters=%i)", (iterations) => {
-    for (const sc of CORPUS) {
-        test(`${sc.name}: settles, energy non-increasing, bounded penetration, no tunnel`, () => {
-            const r = run(sc, iterations);
-            // no NaN/Inf anywhere on the trajectory (the bedrock — an instability goes non-finite)
-            expect(r.finite).toBe(true);
-            // E(t) ≤ E0 (the drop supremum) — a dissipative implicit solver only loses energy; the
-            // penalty spring loads on impact but the band counts only KE+PE, so excess stays ≤ 0
-            // (measured), and a real injection is O(1). 1e-2 is the margin between the two.
-            expect(r.maxExcess).toBeLessThan(BAND_ENERGY_EXCESS);
-            // comes to rest — residual creep well under the 10 m/s fall speed (measured ≤ 0.017)
-            expect(r.settled.maxSpeed).toBeLessThan(BAND_SETTLE);
-            // converged to a non-overlapping rest — overlap at the margin+mg/k floor (measured ≤ 0.019)
-            expect(r.settled.maxPenetration).toBeLessThan(BAND_PENETRATION);
-            // no tunnel-through: even a hard topple's transient corner dip (measured ≥ ground − 0.11)
-            // stays well above a true escape through the ground (a tunneling body's bottom goes ≪ 0)
-            expect(r.worstBottom).toBeGreaterThan(GROUND_TOP - BAND_TUNNEL);
-        });
-    }
-});
+check(
+    "AVBD oracle — topology stability corpus",
+    {
+        claim: "bounded topology corpus remains finite, settled, and non-tunneling",
+        size: "integration",
+        budget: 20000,
+    },
+    () => {
+        for (const iterations of [10, 8]) {
+            for (const sc of CORPUS) {
+                const r = run(sc, iterations);
+                // no NaN/Inf anywhere on the trajectory (the bedrock — an instability goes non-finite)
+                expect(r.finite).toBe(true);
+                // E(t) ≤ E0 (the drop supremum) — a dissipative implicit solver only loses energy; the
+                // penalty spring loads on impact but the band counts only KE+PE, so excess stays ≤ 0
+                // (measured), and a real injection is O(1). 1e-2 is the margin between the two.
+                expect(r.maxExcess).toBeLessThan(BAND_ENERGY_EXCESS);
+                // comes to rest — residual creep well under the 10 m/s fall speed (measured ≤ 0.017)
+                expect(r.settled.maxSpeed).toBeLessThan(BAND_SETTLE);
+                // converged to a non-overlapping rest — overlap at the margin+mg/k floor (measured ≤ 0.019)
+                expect(r.settled.maxPenetration).toBeLessThan(BAND_PENETRATION);
+                // no tunnel-through: even a hard topple's transient corner dip (measured ≥ ground − 0.11)
+                // stays well above a true escape through the ground (a tunneling body's bottom goes ≪ 0)
+                expect(r.worstBottom).toBeGreaterThan(GROUND_TOP - BAND_TUNNEL);
+            }
+        }
+    },
+);
