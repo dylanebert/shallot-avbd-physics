@@ -1,4 +1,4 @@
-// Loader for the dense AVBD parity fixtures (tests/fixtures/avbd/{canonical,budget}/, the C++
+// Loader for the dense AVBD parity fixtures (tests/fixtures/{canonical,budget}/, the C++
 // reference trajectories — see gen-fixtures.ts). Builds a Solver from a fixture's initial state
 // + params, and exposes the per-frame reference state the oracle is checked against. Test
 // scaffolding; the fixtures are f32 (C++ float), the oracle f64 — so trajectory comparison is
@@ -73,7 +73,7 @@ export interface Fixture {
 const unInf = (v: number): number => (v >= 1e29 ? Number.POSITIVE_INFINITY : v);
 
 export function loadFixture(set: ParamSet, scene: string): Fixture {
-    const path = resolve(import.meta.dir, "..", "fixtures", "avbd", set, `dense-${scene}.json`);
+    const path = resolve(import.meta.dir, "fixtures", set, `dense-${scene}.json`);
     return JSON.parse(readFileSync(path, "utf8")) as Fixture;
 }
 
