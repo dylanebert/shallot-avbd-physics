@@ -52,9 +52,9 @@ import { Compute, checkStorageBinding } from "@dylanebert/shallot";
 // the shared LBVH builder (roadmap "Subgroup-first algorithms": physics is a consumer of the same
 // rendering-unaware builder a native-RT path would use). standard → extras is the documented exception
 // for this shared GPU primitive (exports.md `bvh/core`), not the onion default.
-import { BVH_INVALID, type Bvh, bvhRoot, createBvh } from "@dylanebert/shallot/bvh/core";
+import { BVH_INVALID, type Bvh, bvhRoot, createBvh } from "@dylanebert/shallot/bvh";
 import { precompile, precompileScope } from "@dylanebert/shallot/runtime";
-import { bitcastF32toU32, chunk, idiv, uniformLoad, Xform } from "@dylanebert/shallot/utils/core";
+import { bitcastF32toU32, chunk, idiv, uniformLoad, Xform } from "@dylanebert/shallot/utils";
 import tgpu, { type TgpuComputePipeline } from "typegpu";
 import * as d from "typegpu/data";
 import * as std from "typegpu/std";
