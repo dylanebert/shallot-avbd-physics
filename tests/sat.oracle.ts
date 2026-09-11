@@ -51,9 +51,7 @@ const box = (s: GoldBody): Box => ({
 // the relative displacement over the step — the velocity sweep input. Zero for the static configs.
 const dRel = (cfg: GoldConfig): Vec3 => scale(sub(cfg.a.vel as Vec3, cfg.b.vel as Vec3), DT);
 
-let maxErr = 0;
 const near = (got: number, want: number): void => {
-    maxErr = Math.max(maxErr, Math.abs(got - want));
     expect(Math.abs(got - want)).toBeLessThan(TOL);
 };
 
@@ -83,15 +81,6 @@ check(
                 for (let i = 0; i < 3; i++) near(got.rB[i], want.rB[i]);
             }
         }
-    },
-);
-
-check(
-    "observed max error is well under tolerance",
-    { claim: "box-box SAT gold error remains below the derived tolerance" },
-    () => {
-        console.log(`[sat] max abs error vs gold: ${maxErr.toExponential(2)} (tol ${TOL})`);
-        expect(maxErr).toBeLessThan(TOL);
     },
 );
 
