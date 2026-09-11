@@ -1,0 +1,24 @@
+{
+    "$schema": "https://raw.githubusercontent.com/dylanebert/shallot/main/shallot.schema.json",
+    "plugins": { "avbd": "./src/index.ts" },
+    "check": [
+        { "file": "src/collide.test.ts" },
+        { "file": "src/recycle.test.ts" },
+        { "file": "src/step.test.ts" },
+        { "file": "tests/character-sweep.oracle.ts" },
+        { "file": "tests/character.oracle.ts" },
+        { "file": "tests/coloring.oracle.ts" },
+        { "file": "tests/corpus.oracle.ts" },
+        { "file": "tests/differential.oracle.ts" },
+        { "file": "tests/headless.oracle.ts" },
+        { "file": "tests/hull-pack.oracle.ts" },
+        { "file": "tests/hull.oracle.ts" },
+        { "file": "tests/math.oracle.ts" },
+        { "file": "tests/motor.oracle.ts" },
+        { "file": "tests/oracle.oracle.ts" },
+        { "file": "tests/reduce.oracle.ts" },
+        { "file": "tests/rounded.oracle.ts" },
+        { "file": "tests/sat.oracle.ts" },
+        { "file": "tests/storage.oracle.ts" }
+    ]
+}

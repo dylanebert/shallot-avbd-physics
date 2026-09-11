@@ -31,12 +31,26 @@ Or add `AvbdPlugin` to your plugin list in code. Read live poses with `Avbd.read
 
 ```bash
 bun install
-bun run check               # tsc + Biome
-bun test src                # kernel structure and CPU-callable math
-bun test ./tests/*.oracle.ts
+bun run list                # installed Shallot carrier population
+bun run workflow            # regenerate the hosted surface workflow
+bun run check               # tsc + Biome + carrier declaration/drift checks
+bun run test                # installed carrier unit sweep (src/)
+bun run test:integration -- --base <parent> --diff <commit>
 ```
 
-The `*.tier.ts` files need a real GPU.
+CPU oracle evidence is explicit by path, never part of the ordinary unit or integration sweeps:
+
+```bash
+bun test ./tests/math.oracle.ts ./tests/storage.oracle.ts ./tests/coloring.oracle.ts \
+  ./tests/hull-pack.oracle.ts ./tests/reduce.oracle.ts ./tests/sat.oracle.ts \
+  ./tests/hull.oracle.ts ./tests/oracle.oracle.ts ./tests/corpus.oracle.ts \
+  ./tests/motor.oracle.ts ./tests/character.oracle.ts ./tests/character-sweep.oracle.ts \
+  ./tests/rounded.oracle.ts
+```
+
+`tests/differential.oracle.ts` and `tests/headless.oracle.ts` are named GPU oracles. They require a
+real WebGPU seat and must be run by path; a missing seat refuses the run rather than becoming a skip.
+The committed `shallot.json` root manifest is authoritative for the complete visible population.
 
 ### Against a local engine
 

@@ -18,8 +18,7 @@ jobs:
           bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
       - run: bun run check
-      - name: Oracle tests
-        run: bun test ./tests/*.oracle.ts
+      - run: bun run test
       - name: Tag matches package version
         run: test "v$(jq -r .version package.json)" = "${{ github.ref_name }}"
       - name: Publish
