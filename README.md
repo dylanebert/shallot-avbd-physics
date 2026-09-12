@@ -35,7 +35,7 @@ bun run list                # installed Shallot carrier population
 bun run workflow            # regenerate the hosted surface workflow
 bun run check               # tsc + Biome + carrier declaration/drift checks
 bun run test                # installed carrier unit sweep (src/)
-bun run test:integration -- --base <parent> --diff <commit>
+bun run test -- --integration -- --base <parent> --diff <commit>
 ```
 
 CPU oracle evidence is explicit by path, never part of the ordinary unit or integration sweeps:
