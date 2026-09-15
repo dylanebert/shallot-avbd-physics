@@ -5,6 +5,7 @@
         { "file": "src/collide.test.ts" },
         { "file": "src/recycle.test.ts" },
         { "file": "src/step.test.ts" },
+        { "file": "tests/package-preflight.test.ts" },
         { "file": "tests/character-sweep.oracle.ts" },
         { "file": "tests/character.oracle.ts" },
         { "file": "tests/coloring.oracle.ts" },
