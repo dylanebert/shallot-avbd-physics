@@ -1,6 +1,6 @@
 # shallot-avbd-physics
 
-An AVBD (augmented vertex block descent) rigid-body solver for [Shallot](https://github.com/dylanebert/shallot) that runs on the GPU. It's an alternative to Shallot's built-in `PhysicsPlugin`, not an addition: pick one per project. It plugs in through the engine's published `physics/core` seam, so the same `Body`, `Spring` and `Joint` components drive either solver.
+An AVBD (augmented vertex block descent) rigid-body solver for [Shallot](https://github.com/dylanebert/shallot) that runs on the GPU. It is an alternative to Shallot's built-in `PhysicsPlugin`: pick one per project. The extension consumes Shallot's public physics API and exports its own public `./core` surface.
 
 ## Enabling it
 
@@ -19,57 +19,60 @@ Name it in `shallot.json` in place of `Physics`:
 }
 ```
 
-Or add `AvbdPlugin` to your plugin list in code. Read live poses with `Avbd.readBody`; `Avbd.step` is the raw escape hatch. It needs a WebGPU device, so a project without one should stay on the built-in solver.
+Or add `AvbdPlugin` to a plugin list in code. Read live poses with `Avbd.readBody`; `Avbd.step` is the raw escape hatch. It needs a WebGPU device, so a project without one should stay on the built-in solver.
 
-## Layout
+## Layout and evidence
 
 - `src/`: the plugin (`index.ts`), GPU step (`step.ts`), narrowphase (`collide.ts`) and hull packing
+- `src/core.ts`: the public extension core export
 - `tests/`: the f64 CPU oracle, a port of the reference C++, with committed gold vectors
 - `ARCHIVE.md`: retired examples, indexed by Git tag
 
-## Developing
+The CPU corpus and transforms are unit/oracle evidence; the migration does not manufacture a
+population. GPU-authored buffers are named real-device probes and browser pixels have no admitted
+AVBD population yet. If a future consumer makes a rendered claim, it must use Shallot's public
+`captureFrame` contract rather than a local screenshot transport or CPU reconstruction.
+
+## Installed carrier gates
+
+The installed Shallot carrier owns the project population:
 
 ```bash
-bun install --frozen-lockfile
-bun run list                # installed Shallot carrier population
-bun run workflow            # regenerate the hosted surface workflow
-bun run check               # tsc + Biome + carrier declaration/drift checks
-bun run test                # installed carrier unit sweep (src/)
-bun run test -- --integration -- --base <parent> --diff <commit>
+bun run list
+bun run check
+bun run test
+bun run workflow
+bun run test -- --integration --base <parent> --diff <commit>
 ```
 
-CPU oracle evidence is explicit by path, never part of the ordinary unit or integration sweeps:
+The changed-subject selector must match at least one integration row. Named CPU/GPU evidence stays
+explicit and is requested through the carrier's oracle selector when its declared premise exists;
+missing GPU seats are inconclusive, never green.
 
-```bash
-bun test ./tests/math.oracle.ts ./tests/storage.oracle.ts ./tests/coloring.oracle.ts \
-  ./tests/hull-pack.oracle.ts ./tests/reduce.oracle.ts ./tests/sat.oracle.ts \
-  ./tests/hull.oracle.ts ./tests/oracle.oracle.ts ./tests/corpus.oracle.ts \
-  ./tests/motor.oracle.ts ./tests/character.oracle.ts ./tests/character-sweep.oracle.ts \
-  ./tests/rounded.oracle.ts
-```
+## Package states
 
-`tests/differential.oracle.ts` and `tests/headless.oracle.ts` are named GPU oracles and never enter the ordinary unit or integration sweeps. Run them directly by path to request that evidence. Their bodies need WebGPU, but the pinned carrier does not supply the `gpu` requirement, so the current direct commands refuse nonzero before the bodies run rather than passing or skipping. The committed `shallot.json` root manifest remains authoritative for the complete visible population.
+The stable extension compatibility range remains in `peerDependencies`. The committed development
+identity is the qualified source-stage candidate
+`github:dylanebert/shallot#70770cfc34d82fdd19cb705d8753bb6f093748d6` in both `package.json` and
+`bun.lock`. A future stable release may replace it with an intentional stable range and fresh lock.
 
-### Against a local engine
+For local co-development, require Bun 1.4.2, record both repositories' HEAD/dirt and manifest/lock
+hashes, run `bun link` only in the Shallot producer, and run
+`bun link @dylanebert/shallot --no-save` here. Do not link a second `typegpu`; Vite consumers
+configure `resolve.dedupe` for `@dylanebert/shallot` and `typegpu`. Exit with a fresh-cache
+`bun install --force --frozen-lockfile`, prove the installed realpath is no longer the producer,
+then rerun the focused gate. The manifest and lock must remain byte-identical.
 
-`@dylanebert/shallot` is a peer dependency on the published range `^0.9.5`; the dev dependency is pinned to the exact Git commit `github:dylanebert/shallot#1ad4d7a500c13b4a3c0422a3b09584834d5e626d`. To test against an unreleased engine, link it and its `typegpu` too. The engine and the solver must share one typegpu instance, or struct schemas from one copy fail layout checks in the other:
-
-```bash
-# in your shallot checkout
-bun link
-cd node_modules/typegpu && bun link
-
-# here
-bun link @dylanebert/shallot
-bun link typegpu
-bun test src
-```
-
-Run `bun install --frozen-lockfile --force` here to replace the local links with the exact Shallot and TypeGPU dependencies recorded in `bun.lock`. This restores the Git-pinned Shallot carrier, not the published peer range. To remove the global link registrations too, run `bun unlink` in the Shallot checkout and in its `node_modules/typegpu` directory.
+A local `bun pm pack` of the extension is temporary package preflight, not a remote package state.
+Inspect its source, integrity and installed metadata, prove the `/core` export and installed
+`shallot` bin, then restore the candidate Git stage with the frozen install. Never persist a
+`file:`/`link:` directory, short or moving Git ref, mutable dist-tag, or evidence-free tarball.
 
 ## Releasing
 
-Bump `version` in `package.json`, commit, and push a matching `v<version>` tag. The release workflow runs the native `bun run check` and `bun run test` gates before publishing. Named oracle commands remain explicit evidence and are not part of the release gate.
+Bump `version` in `package.json`, commit, and push a matching `v<version>` tag. The release workflow
+runs the native `bun run check` and `bun run test` gates before publishing. Named oracle commands
+remain explicit evidence and are not part of the release gate.
 
 ## License
 
