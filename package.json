@@ -34,7 +34,7 @@
     },
     "devDependencies": {
         "@biomejs/biome": "^2.5.13",
-        "@dylanebert/shallot": "github:dylanebert/shallot#83ee2a918d26a5868d0b703c94a1b7cbf5f28c30",
+        "@dylanebert/shallot": "github:dylanebert/shallot#70770cfc34d82fdd19cb705d8753bb6f093748d6",
         "@types/bun": "latest",
         "@webgpu/types": "^0.1.72",
         "typegpu": "~0.12.5",
