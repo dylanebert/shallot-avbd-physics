@@ -6,7 +6,7 @@
       "name": "@dylanebert/shallot-avbd-physics",
       "devDependencies": {
         "@biomejs/biome": "^2.5.13",
-        "@dylanebert/shallot": "github:dylanebert/shallot#70770cfc34d82fdd19cb705d8753bb6f093748d6",
+        "@dylanebert/shallot": "github:dylanebert/shallot#0664218f465224397b80aeb604b51178ac71cfb2",
         "@types/bun": "latest",
         "@webgpu/types": "^0.1.72",
         "typegpu": "~0.12.5",
@@ -56,7 +56,7 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.5.13", "", { "os": "win32", "cpu": "x64" }, "sha512-VOofU/nW761XWzUeUNE8zzYNyPrxuMuNFMizL0qz7J75yeV8N7WFheUlk1/K6dOkaFpH9wJ+lDKlwjAbw0346w=="],
 
-    "@dylanebert/shallot": ["@dylanebert/shallot@github:dylanebert/shallot#70770cf", { "dependencies": { "@babel/parser": "^8.0.4", "@types/node": "^26.2.0", "@webgpu/types": "^0.1.72", "unplugin-typegpu": "~0.12.3", "vite": "^8.3.0" }, "peerDependencies": { "bun-webgpu": ">=0.1.7", "playwright": "^1.0.0", "typegpu": "~0.12.5" }, "optionalPeers": ["bun-webgpu", "playwright"], "bin": { "shallot": "./bin/shallot.ts" } }, "dylanebert-shallot-70770cf", "sha512-D5BiR3BpI6Mq4ldaWrnb35evE6J1qU62VrKDCHgWPqAQyBxWwUi41Vi8TP4LI6V5BBTtGxuFKwXvJ6dLqmEqmQ=="],
+    "@dylanebert/shallot": ["@dylanebert/shallot@github:dylanebert/shallot#0664218", { "dependencies": { "@babel/parser": "^8.0.4", "@types/node": "^26.2.0", "@webgpu/types": "^0.1.72", "unplugin-typegpu": "~0.12.3", "vite": "^8.3.0" }, "peerDependencies": { "bun-webgpu": ">=0.1.7", "playwright": "^1.0.0", "typegpu": "~0.12.5" }, "optionalPeers": ["bun-webgpu", "playwright"], "bin": { "shallot": "./bin/shallot.ts" } }, "dylanebert-shallot-0664218", "sha512-tnyD1mOSycSqZMpgh04mCx6iC3l8AknEQ+xA2wDFK96ifD0n6Q5O9UxjFCFL8A7gagI21AFnB+m8T2qon7Qp8w=="],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 
