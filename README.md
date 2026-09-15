@@ -53,7 +53,7 @@ missing GPU seats are inconclusive, never green.
 
 The stable extension compatibility range remains in `peerDependencies`. The committed development
 identity is the qualified source-stage candidate
-`github:dylanebert/shallot#70770cfc34d82fdd19cb705d8753bb6f093748d6` in both `package.json` and
+`github:dylanebert/shallot#0664218f465224397b80aeb604b51178ac71cfb2` in both `package.json` and
 `bun.lock`. A future stable release may replace it with an intentional stable range and fresh lock.
 
 For local co-development, require Bun 1.4.2, record both repositories' HEAD/dirt and manifest/lock

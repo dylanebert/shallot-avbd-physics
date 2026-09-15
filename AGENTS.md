@@ -2,7 +2,7 @@
 
 This repository is a published Shallot extension. Its stable compatibility contract stays in
 `peerDependencies`; its own gates run against the qualified source-stage candidate
-`github:dylanebert/shallot#70770cfc34d82fdd19cb705d8753bb6f093748d6` in `devDependencies` and
+`github:dylanebert/shallot#0664218f465224397b80aeb604b51178ac71cfb2` in `devDependencies` and
 `bun.lock`. Do not persist a `file:`, `link:`, short or moving Git selector, mutable dist-tag, or
 local tarball. The candidate identity is the complete 40-hex SHA, not Bun's abbreviated display.
 

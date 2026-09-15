@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { check } from "@dylanebert/shallot/harness/check";
 
-const CANDIDATE_SHA = "70770cfc34d82fdd19cb705d8753bb6f093748d6";
+const CANDIDATE_SHA = "0664218f465224397b80aeb604b51178ac71cfb2";
 const CANDIDATE_TAG = `dylanebert-shallot-${CANDIDATE_SHA.slice(0, 7)}`;
 
 interface CommandResult {
