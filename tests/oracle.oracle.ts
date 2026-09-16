@@ -583,8 +583,8 @@ check(
         },
         () => {
             // S2 grant arm: a legitimate finite-positive stiffnessAng (1000) still builds a joint under AVBD —
-            // the over-refusal check no refusal arm can show. Mirrors physics's existing stiffnessAng = 1000 settle
-            // arm (physics/joints.test.ts "an intermediate stiffnessAng settles rather than oscillates"), scored
+            // the over-refusal check no refusal arm can show. Mirrors Shallot physics's stiffnessAng = 1000 settle
+            // arm ("an intermediate stiffnessAng settles rather than oscillates"), scored
             // against the CPU oracle here. The setup matches the spherical/fixed test above — a dynamic box
             // pinned to a static anchor at a 2 m arm under gravity — with the angular stiffness set to the
             // finite-intermediate 1000 (not 0 = spherical, not ∞ = fixed). Gravity torques the box about the
@@ -924,8 +924,7 @@ check(
 // (both mass ≤ 0), so the contact constraint C is never satisfied — it stays penetrating frame
 // after frame. The reference's dual update (solver.cpp:230 runs updateDual on EVERY force) then
 // ramps that contact's penalty `k += βLin·|C|` every iteration, every frame, with nothing ever
-// moving to relax C — the escalating constraint force the legacy stack blew up on (physics.md
-// "legacy antipatterns"). The fix is at the dual update: a contact NO dynamic body can resolve
+// moving to relax C — the escalating constraint force the legacy stack blew up on. The fix is at the dual update: a contact NO dynamic body can resolve
 // must not ramp. Validated here (red without the gate: the penalty escalates), bounded with it.
 
 const maxNormalPenalty = (s: Solver): number => {
