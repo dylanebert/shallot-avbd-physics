@@ -27,3 +27,10 @@ A clean exit force-installs frozen from a newly empty cache, proves the installe
 producer and leaves no symlink or local-directory residue, then reruns the focused gate. Package
 preflight is a temporary artifact only, never a persisted stage. The public extension exports are
 `@dylanebert/shallot-avbd-physics` and `/core`; Shallot imports use its public package exports only.
+
+`tests/character-sweep.oracle.ts` and the character rows of `tests/headless.oracle.ts`
+(`characterplugin` and `playerplugin`) gate the engine's shipped character. They stay owned here
+until they move. The C++ fixture-parity rows are gone from `tests/oracle.oracle.ts` because their
+fixtures are uncommitted; `tests/corpus.oracle.ts` and the closed-form rows are what survives.
+Oracle rows that step the solver are `integration` with a 20000 ms budget, and construction or
+closed-form rows are `unit`.

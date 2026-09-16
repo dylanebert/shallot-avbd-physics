@@ -1,7 +1,6 @@
 import { expect } from "bun:test";
 import { check } from "@dylanebert/shallot/harness/check";
 import { SPECULATIVE_DISTANCE } from "./collide";
-import { fixtureSolver, framePos, loadFixture } from "./fixtures";
 import { joint } from "./joint";
 import { COLLISION_MARGIN, PENALTY_MIN } from "./manifold";
 import { length, type Quat, rotate, scale, sub, transform, type Vec3 } from "./math";
@@ -11,15 +10,9 @@ import { spring } from "./spring";
 
 // The phase-0 standing gate: the TS oracle is the executable AVBD spec. Tolerances are derived
 // + checked (the values in the comments were measured against the oracle, not guessed), and the
-// gate follows the ladder: closed-form gates
-// (tightest, no reference), fixture reproduction (deterministic parts only — the rest state +
-// the energy invariant, never a long-horizon trajectory match), and the scheduler bridge.
-//
-// Why no full-trajectory match on chaotic scenes: two float implementations (f64 oracle, f32 C++)
-// can't bit-match a stacking sim over 600 frames — contact-set membership flips at the margin and
-// trajectories separate exponentially (Lyapunov divergence is physics, not a bug). So each thing
-// is checked where it's deterministic: the rest state (same fixed point), and energy conservation
-// (premise-valid every frame, settled or not — a blow-up is an energy injection).
+// gate holds closed-form rows (tightest, no reference) and the scheduler bridge. Scene invariants
+// live in corpus.oracle.ts; the C++ fixture-parity rows were cut because their generated fixtures
+// are not committed and cannot run here.
 
 // total mechanical energy in the solver's own convention (world-frame diagonal inertia, matching
 // the reference's MAng): KE_lin + KE_ang + PE. A dropped pile starts at rest at max height, so
@@ -42,18 +35,6 @@ const maxSpeed = (s: Solver): number => {
     for (const b of s.bodies) m = Math.max(m, length(b.velLin));
     return m;
 };
-
-// Energy is recomputed each frame (no accumulation), so the only error is the round-off of one
-// N-term f64 sum ≈ N·ε_machine ≈ 3e-14 relative; a numerical instability injects O(1). 1e-6 is a
-// derived guard band 8 orders above the noise floor and 4 below a real failure. Measured: 0.
-const ENERGY_TOL = 1e-6;
-
-// The C++ fixtures run 600 frames, but the oracle only checks deterministic invariants: the energy
-// bound (a per-step invariant — instability shows in the first frames, not the 500th), the early
-// trajectory band, and the settled rest state. The non-chaotic scenes all settle well inside this
-// cap, and the `maxSpeed < 0.05` rest assert self-guards it: a scene not yet at rest fails loudly,
-// so the cap can't silently weaken a settle gate. Replaying the full 600 just re-steps a static pile.
-const REPLAY = 300;
 
 check(
     "free-fall matches the exact discrete symplectic-Euler trajectory",
@@ -362,238 +343,6 @@ check(
     },
 );
 
-check(
-    "C++ contact fixtures preserve bounded rest states and energy",
-    {
-        claim: "bounded C++ contact fixtures preserve rest and energy",
-        size: "integration",
-        budget: 20000,
-    },
-    () => {
-        // Non-chaotic settling scenes: the deterministic parts are the rest state (same fixed point as
-        // C++) and the energy invariant. The transient is tracked only within the f32-vs-f64 round-off
-        // band (an order below the box scale), not pinned frame-by-frame.
-        for (const scene of ["ground", "two-boxes", "stack", "stack-ratio"]) {
-            const fx = loadFixture("canonical", scene);
-            const s = fixtureSolver(fx);
-            const E0 = energy(s);
-            let maxExcess = 0;
-            let maxTransient = 0;
-            for (let f = 0; f < Math.min(fx.frames.length, REPLAY); f++) {
-                step(s);
-                maxExcess = Math.max(maxExcess, (energy(s) - E0) / Math.abs(E0));
-                let fm = 0;
-                for (let i = 0; i < s.bodies.length; i++) {
-                    fm = Math.max(fm, length(sub(s.bodies[i].posLin, framePos(fx.frames[f], i))));
-                }
-                maxTransient = Math.max(maxTransient, fm);
-            }
-            expect(maxExcess).toBeLessThan(ENERGY_TOL);
-            // f32(C++) vs f64(oracle) round-off band: an order below the box scale (1), above the
-            // observed ~1e-3 impact-moment divergence. Catches a gross trajectory bug (O(1)).
-            expect(maxTransient).toBeLessThan(1e-2);
-            // premise: the scene settles (residual speed ≪ the 10 m/s fall speed). Then the pose
-            // matches the C++ at the same frame to f32 equilibrium precision — both at the stable
-            // rest fixed point (maxSpeed gate), where the f32/f64 paths reconverge tight (measured
-            // < 1e-4), an order below the chaotic-impact transient band above.
-            expect(maxSpeed(s)).toBeLessThan(0.05);
-            const last = fx.frames[Math.min(fx.frames.length, REPLAY) - 1];
-            let restErr = 0;
-            for (let i = 0; i < s.bodies.length; i++) {
-                restErr = Math.max(restErr, length(sub(s.bodies[i].posLin, framePos(last, i))));
-            }
-            expect(restErr).toBeLessThan(1e-3);
-        }
-    },
-);
-
-// the suite's heaviest fixture (80 frames of high-valence contact solve) runs ~5.5s on a slow
-// machine, over bun's 5s default — a wall-time budget, not a correctness bound
-check(
-    "pyramid: energy never increases through the collapse (high-valence stability)",
-    { claim: "pyramid contact collapse remains energy stable", size: "integration", budget: 20000 },
-    () => {
-        // The high-valence stress (a base body carries several simultaneous contacts), checked at
-        // the runtime-budget params (4 iters) — the harder stability regime and 2.5× cheaper. No
-        // settle/trajectory claim: the pyramid never fully settles, so the premise is "it collides"
-        // (speed peaks in free-fall then drops as contacts engage), verified in-test.
-        const fx = loadFixture("budget", "pyramid");
-        const s = fixtureSolver(fx);
-        const E0 = energy(s);
-        let maxExcess = 0;
-        let peak = 0;
-        let collided = false;
-        for (let f = 0; f < 80; f++) {
-            step(s);
-            maxExcess = Math.max(maxExcess, (energy(s) - E0) / Math.abs(E0));
-            const sp = maxSpeed(s);
-            peak = Math.max(peak, sp);
-            if (peak > 5 && sp < peak * 0.3) collided = true;
-        }
-        expect(peak).toBeGreaterThan(5); // free-fall peak (measured ~11)
-        expect(collided).toBe(true); // contacts engaged and dissipated the peak (measured @ frame 68)
-        expect(maxExcess).toBeLessThan(ENERGY_TOL);
-    },
-);
-
-check(
-    "dynamic-friction: tracks the C++ slide early, energy never increases",
-    {
-        claim: "dynamic friction preserves the bounded C++ slide",
-        size: "integration",
-        budget: 20000,
-    },
-    () => {
-        // Starts with kinetic energy (boxes launched at vx=10); friction can only remove it. Energy
-        // non-increasing holds the whole run, but it's a weak gate — a near-frictionless slide passes
-        // it too (the kinetic-friction bug did). So also pin the early slide against the C++ where it's
-        // deterministic (before the boxes diverge): the bug fades kinetic friction, so the boxes slide
-        // far past the C++ within ~10 frames (measured ≥ 0.1 m by frame 8 with the bug; ≤ 1e-3 here).
-        const fx = loadFixture("canonical", "dynamic-friction");
-        const s = fixtureSolver(fx);
-        const E0 = energy(s);
-        let maxExcess = 0;
-        let earlyErr = 0;
-        // no settle assert here — only the energy bound + the early (f<100) trajectory band, so stop
-        // once the early window is past plus a margin for the energy invariant. The tail is a static slide.
-        for (let f = 0; f < 150; f++) {
-            step(s);
-            maxExcess = Math.max(maxExcess, (energy(s) - E0) / Math.abs(E0));
-            if (f < 100)
-                for (let i = 0; i < s.bodies.length; i++)
-                    earlyErr = Math.max(
-                        earlyErr,
-                        length(sub(s.bodies[i].posLin, framePos(fx.frames[f], i))),
-                    );
-        }
-        expect(maxExcess).toBeLessThan(ENERGY_TOL);
-        // the first 100 frames (the slide, before the f32/f64 paths separate) track the C++ tightly —
-        // measured < 1e-3; the friction-ramp bug drives it past 0.1 within 8 frames.
-        expect(earlyErr).toBeLessThan(1e-3);
-    },
-);
-
-// The demo's own box scenes are all axis-aligned (zero rotation) and its friction scenes slide off
-// the 100-wide ground and free-fall (never settle). These three harness scenes (harness-dense.cpp,
-// mirroring tests/corpus.ts) cover the dynamics that were never gold-checked: kinetic friction
-// that stops a box, a box tipping vertex→face, and a stack toppling. Each is gated where it's
-// deterministic: a clean slide / a contained tip track the C++ over the
-// whole run; a chaotic topple only early + on the statistical band.
-
-check(
-    "friction-settle: tracks the C++ slide-to-rest + lower-μ-slides-farther",
-    {
-        claim: "friction settles bounded slides in the C++ order",
-        size: "integration",
-        budget: 20000,
-    },
-    () => {
-        // four boxes launched at 5 m/s, decelerated to rest by friction within the ground. NOT chaotic
-        // (a straight slide to a stop), so the f64 oracle tracks the f32 C++ over the WHOLE run. This is
-        // the gate that catches the kinetic-friction ramp bug: gating the tangent-penalty ramp on the
-        // post-clamp force ramps a sliding contact's penalty unboundedly, fading friction to ~0 so the
-        // box never stops and slides ~100 m off the ground (vs the C++ stop). Measured max err 6.6e-5.
-        const fx = loadFixture("canonical", "friction-settle");
-        const s = fixtureSolver(fx);
-        let maxErr = 0;
-        for (let f = 0; f < Math.min(fx.frames.length, REPLAY); f++) {
-            step(s);
-            for (let i = 0; i < s.bodies.length; i++)
-                maxErr = Math.max(
-                    maxErr,
-                    length(sub(s.bodies[i].posLin, framePos(fx.frames[f], i))),
-                );
-        }
-        // 1e-3 is a derived f32-vs-f64 band an order above the measured 6.6e-5, far below the box scale.
-        expect(maxErr).toBeLessThan(1e-3);
-        expect(maxSpeed(s)).toBeLessThan(0.05); // came to rest (the bug leaves it sliding ~4.6 m/s)
-        // friction signature: boxes 1..4 carry μ 0.2..0.8; lower μ slides farther (monotonic stop). A
-        // faded kinetic friction would let them all slide the same (off the edge), breaking the order.
-        const slid = (i: number): number => Math.abs(s.bodies[i].posLin[0] - -6);
-        expect(slid(1)).toBeGreaterThan(slid(2));
-        expect(slid(2)).toBeGreaterThan(slid(3));
-        expect(slid(3)).toBeGreaterThan(slid(4));
-    },
-);
-
-check(
-    "corner-rest: tracks the C++ vertex→face tip, energy non-increasing, settles flat",
-    {
-        claim: "corner impact settles through the C++ vertex-to-face path",
-        size: "integration",
-        budget: 20000,
-    },
-    () => {
-        // a unit box tilted 45° about x then z, dropped — lands on a vertex, tips through an edge to a
-        // face. The tip is contained (one box, no scatter), so it tracks the C++ the whole run (measured
-        // 2.5e-5). The kinetic-friction bug also corrupts this (the box slides during the tip): measured
-        // 2.3e-2 with the bug, 2.5e-5 fixed.
-        const fx = loadFixture("canonical", "corner-rest");
-        const s = fixtureSolver(fx);
-        const E0 = energy(s);
-        let maxErr = 0;
-        let maxExcess = 0;
-        for (let f = 0; f < Math.min(fx.frames.length, REPLAY); f++) {
-            step(s);
-            maxExcess = Math.max(maxExcess, (energy(s) - E0) / Math.abs(E0));
-            for (let i = 0; i < s.bodies.length; i++)
-                maxErr = Math.max(
-                    maxErr,
-                    length(sub(s.bodies[i].posLin, framePos(fx.frames[f], i))),
-                );
-        }
-        expect(maxErr).toBeLessThan(1e-3);
-        // dropped from rest ⇒ E0 is the supremum; the penalty spring loads on the corner impact but
-        // never lifts the box above the drop, so excess stays ≤ a small slack (1e-2, the impact band).
-        expect(maxExcess).toBeLessThan(1e-2);
-        // settled flat on a face at the box-touching rest height (~margin below 1.0), at rest
-        expect(maxSpeed(s)).toBeLessThan(0.05);
-        expect(s.bodies[1].posLin[1]).toBeGreaterThan(0.9);
-        expect(s.bodies[1].posLin[1]).toBeLessThan(1.05);
-    },
-);
-
-check(
-    "leaning: early topple tracks the C++; energy non-increasing; settles flat on the ground",
-    {
-        claim: "leaning stack topples finitely and settles on the ground",
-        size: "integration",
-        budget: 20000,
-    },
-    () => {
-        // a 5-box stack offset 0.4 in +x — the upper COM is past the base, so it topples, scatters, and
-        // settles. A topple is the chaotic regime, so gate the early fall against the C++ (deterministic
-        // before the scatter — measured < 1e-3 through frame 125) and the tail on the statistical band:
-        // energy never exceeds the drop supremum, comes to rest, every box ends on the ground.
-        const fx = loadFixture("canonical", "leaning");
-        const s = fixtureSolver(fx);
-        const E0 = energy(s);
-        let earlyErr = 0;
-        let maxExcess = 0;
-        let finite = true;
-        for (let f = 0; f < Math.min(fx.frames.length, REPLAY); f++) {
-            step(s);
-            maxExcess = Math.max(maxExcess, (energy(s) - E0) / Math.abs(E0));
-            if (!s.bodies.every((b) => b.posLin.every(Number.isFinite))) finite = false;
-            if (f < 100)
-                for (let i = 0; i < s.bodies.length; i++)
-                    earlyErr = Math.max(
-                        earlyErr,
-                        length(sub(s.bodies[i].posLin, framePos(fx.frames[f], i))),
-                    );
-        }
-        expect(finite).toBe(true);
-        expect(earlyErr).toBeLessThan(1e-3); // the free-fall + first contacts, before the scatter
-        expect(maxExcess).toBeLessThan(1e-2); // dissipative through the topple (measured ~0)
-        expect(maxSpeed(s)).toBeLessThan(0.05); // settles
-        // every dynamic box ends resting on the ground (toppled flat, none launched away)
-        for (let i = 1; i < s.bodies.length; i++) {
-            expect(s.bodies[i].posLin[1]).toBeGreaterThan(0.9);
-            expect(s.bodies[i].posLin[1]).toBeLessThan(1.1);
-        }
-    },
-);
-
 {
     // Phase 6.1: the first non-contact Force — a soft distance constraint (spring.ts, a port of
     // spring.cpp). C = ‖pA − pB‖ − rest, force f = stiffness·C, no dual (finite stiffness ⇒ λ = 0).
@@ -701,45 +450,6 @@ check(
             // the derived 0.12% of the continuous 2π√(m/k).
             expect(measuredT).toBeCloseTo(Tdisc, 3); // |Δ| < 5e-4 s
             expect(measuredT).toBeCloseTo(Tcont, 2); // |Δ| < 5e-3 s — the continuous limit, +0.12% off
-        },
-    );
-
-    check(
-        "reproduces the C++ spring + soft/stiff-ratio fixtures (whole-run tracking)",
-        {
-            claim: "spring fixtures preserve soft and stiff C++ trajectories",
-            size: "integration",
-            budget: 20000,
-        },
-        () => {
-            // The harness spring scenes: sceneSpring (the hanging mass on the ground) and sceneSpringsRatio
-            // (an 8-body chain of alternating soft k=10 / stiff k=10000 springs with offset anchors, so the
-            // links rotate). A spring chain has no contact-set churn, so it isn't chaotic — the f64 oracle
-            // tracks the f32 C++ over the WHOLE 600 frames, gated on a derived f32-vs-f64 round-off band an
-            // order below the oscillation amplitude (cf. friction-settle's whole-run track). This is the
-            // oracle == C++ rung; GPU == oracle is the later gym `springs` gate. Reconstructing the spring
-            // also exercises the harness springs dump (harness-dense.cpp) → fixtures.ts loader path.
-            const trackBand: Record<string, number> = { spring: 1e-3, "spring-ratio": 2e-2 };
-            for (const scene of ["spring", "spring-ratio"]) {
-                const fx = loadFixture("canonical", scene);
-                expect((fx.springs ?? []).length).toBeGreaterThan(0); // the dump round-tripped
-                const s = fixtureSolver(fx);
-                let maxErr = 0;
-                let finite = true;
-                for (let f = 0; f < fx.frames.length; f++) {
-                    step(s);
-                    for (let i = 0; i < s.bodies.length; i++) {
-                        if (s.bodies[i].mass <= 0) continue;
-                        if (!s.bodies[i].posLin.every(Number.isFinite)) finite = false;
-                        maxErr = Math.max(
-                            maxErr,
-                            length(sub(s.bodies[i].posLin, framePos(fx.frames[f], i))),
-                        );
-                    }
-                }
-                expect(finite).toBe(true);
-                expect(maxErr).toBeLessThan(trackBand[scene]); // measured 2.5e-4 (spring) / 7.7e-3 (ratio)
-            }
         },
     );
 }
@@ -873,8 +583,8 @@ check(
         },
         () => {
             // S2 grant arm: a legitimate finite-positive stiffnessAng (1000) still builds a joint under AVBD —
-            // the over-refusal check no refusal arm can show. Mirrors physics's existing stiffnessAng = 1000 settle
-            // arm (physics/joints.test.ts "an intermediate stiffnessAng settles rather than oscillates"), scored
+            // the over-refusal check no refusal arm can show. Mirrors Shallot physics's stiffnessAng = 1000 settle
+            // arm ("an intermediate stiffnessAng settles rather than oscillates"), scored
             // against the CPU oracle here. The setup matches the spherical/fixed test above — a dynamic box
             // pinned to a static anchor at a 2 m arm under gravity — with the angular stiffness set to the
             // finite-intermediate 1000 (not 0 = spherical, not ∞ = fixed). Gravity torques the box about the
@@ -923,118 +633,9 @@ check(
     );
 
     check(
-        "a hung rigid chain settles straight, anchors held to the augmented-Lagrangian residual",
-        {
-            claim: "rigid joint chain preserves straight settled anchors",
-            size: "integration",
-            budget: 20000,
-        },
-        () => {
-            // Roadmap closed forms: a fixed-joint chain settles straight + a bounded steady anchor error. The
-            // fixed chain is a horizontal cantilever fixed to a static anchor; the angular rows keep it rigid, so
-            // it settles to rest with the links still on the anchor's y/z row. The rigid constraint isn't driven
-            // to zero but to the augmented-Lagrangian residual at the canonical (α 0.99 / γ 0.999 / β 1e4 / 10
-            // iter) schedule — the same satisfaction scale as the 0.01 m contact margin, and the exact value the
-            // C++ reference settles to (the parity test pins the value; this gates the qualitative invariants).
-            const fx = loadFixture("canonical", "joint-fixed-chain");
-            const s = fixtureSolver(fx);
-            for (let f = 0; f < fx.frames.length; f++) step(s);
-
-            let maxAnchor = 0;
-            for (const jt of s.joints) {
-                const pA = jt.a ? transform(jt.a.posLin, jt.a.posAng, jt.rA) : jt.rA;
-                const pB = transform(jt.b.posLin, jt.b.posAng, jt.rB);
-                maxAnchor = Math.max(maxAnchor, length(sub(pA, pB)));
-            }
-            let maxDev = 0;
-            for (const b of s.bodies) {
-                if (b.mass <= 0) continue;
-                maxDev = Math.max(maxDev, Math.abs(b.posLin[1] - 8), Math.abs(b.posLin[2])); // off the anchor row
-            }
-            expect(maxSpeed(s)).toBeLessThan(1e-2); // settled to rest (measured 9e-5)
-            expect(maxAnchor).toBeLessThan(1e-3); // the AL residual, an order under the 0.01 m margin (measured 4.4e-4)
-            expect(maxDev).toBeLessThan(1e-2); // straight: < 1 cm sag/lateral over 3 links (measured 6e-3)
-        },
-    );
-
-    check(
-        "reproduces the C++ joint fixtures — pendulum, spherical + fixed chains (whole-run tracking)",
-        {
-            claim: "joint fixtures preserve pendulum and chain C++ trajectories",
-            size: "integration",
-            budget: 20000,
-        },
-        () => {
-            // The harness joint scenes (scenes.h): a spherical-pin pendulum, a 3-link spherical chain swaying, a
-            // 3-link fixed-joint cantilever. All contact-free + bounded + non-chaotic, so the f64 oracle tracks the
-            // f32 C++ over the whole 600 frames, gated on a derived f32-vs-f64 round-off band an order below the
-            // motion scale (cf. the spring fixtures). The oracle == C++ rung; GPU == oracle is the later gym gate.
-            // Reconstructing the joints also exercises the harness joint dump → fixtures loader (the 1e30 → ∞ map).
-            const trackBand: Record<string, number> = {
-                "joint-pendulum": 2e-3,
-                "joint-spherical-chain": 1e-3,
-                "joint-fixed-chain": 1e-4,
-            };
-            for (const scene of ["joint-pendulum", "joint-spherical-chain", "joint-fixed-chain"]) {
-                const fx = loadFixture("canonical", scene);
-                expect((fx.joints ?? []).length).toBeGreaterThan(0); // the dump round-tripped
-                const s = fixtureSolver(fx);
-                let maxErr = 0;
-                let finite = true;
-                for (let f = 0; f < fx.frames.length; f++) {
-                    step(s);
-                    for (let i = 0; i < s.bodies.length; i++) {
-                        if (s.bodies[i].mass <= 0) continue;
-                        if (!s.bodies[i].posLin.every(Number.isFinite)) finite = false;
-                        maxErr = Math.max(
-                            maxErr,
-                            length(sub(s.bodies[i].posLin, framePos(fx.frames[f], i))),
-                        );
-                    }
-                }
-                expect(finite).toBe(true);
-                expect(maxErr).toBeLessThan(trackBand[scene]); // measured 4.0e-4 / 2.0e-4 / 9.4e-6
-            }
-        },
-    );
-
-    check(
-        "joints never inject energy — a swinging pendulum + chains stay E(t) ≤ E(0) (the rope-explosion guard)",
-        {
-            claim: "joint pendulums and chains never inject mechanical energy",
-            size: "integration",
-            budget: 20000,
-        },
-        () => {
-            // The legacy solver injected energy into ropes; the α-stabilized rigid joint + BDF1 recovery must not.
-            // Each joint fixture is driven only by gravity from its start pose, so E(0) is the supremum and a
-            // dissipative solver only loses energy. A coincident-anchor joint conserves it (measured dE = 0 to f64
-            // round-off); energy GROWING is the injection failure, caught loudly here. The non-coincident footgun
-            // that DOES inject is blocked at construction — the next test.
-            for (const scene of ["joint-pendulum", "joint-spherical-chain", "joint-fixed-chain"]) {
-                const fx = loadFixture("canonical", scene);
-                const s = fixtureSolver(fx);
-                const e0 = energy(s);
-                let maxE = e0;
-                let finite = true;
-                for (let f = 0; f < fx.frames.length; f++) {
-                    step(s);
-                    maxE = Math.max(maxE, energy(s));
-                    for (const b of s.bodies) if (!b.posLin.every(Number.isFinite)) finite = false;
-                }
-                expect(finite).toBe(true);
-                // band = 1e-3·E0, three orders over f64 round-off and far under the +34% a real injection produces
-                expect(maxE).toBeLessThanOrEqual(e0 * (1 + 1e-3));
-            }
-        },
-    );
-
-    check(
         "a grossly non-coincident joint fails loudly at construction (the rope-explosion footgun)",
         {
             claim: "non-coincident joints refuse at construction",
-            size: "integration",
-            budget: 20000,
         },
         () => {
             // Reproduces the legacy rope bug + proves the guard catches it. A rigid joint whose anchors start far
@@ -1053,8 +654,6 @@ check(
         "a joint between two non-dynamic bodies fails loudly at construction (the both-static energy guard)",
         {
             claim: "all-static joints refuse while static anchors remain valid",
-            size: "integration",
-            budget: 20000,
         },
         () => {
             // A joint no dynamic body can resolve — both endpoints mass ≤ 0 (static/kinematic) — is never satisfied
@@ -1212,8 +811,8 @@ check(
 }
 
 // The Phase-3 warmstart crux at the spec level: the reference's force-list manifold persistence — `initManifold` merges this frame's
-// contacts onto last frame's by feature key, carrying λ/k with γ decay (manifold.ts). The fixtures
-// (oracle.test.ts above) exercise the merge on *settling* scenes; these close the documented gap —
+// contacts onto last frame's by feature key, carrying λ/k with γ decay (manifold.ts). These rows
+// close the documented gap —
 // a churning scene (flipping feature keys) and the positive "warmstart converges tighter" property
 // that proves the persisted state actually does work. The GPU reconstructs this merge (step.ts);
 // the gym `pile` stack-warmstart gate verifies GPU == this oracle on the real device.
@@ -1321,8 +920,7 @@ check(
 // (both mass ≤ 0), so the contact constraint C is never satisfied — it stays penetrating frame
 // after frame. The reference's dual update (solver.cpp:230 runs updateDual on EVERY force) then
 // ramps that contact's penalty `k += βLin·|C|` every iteration, every frame, with nothing ever
-// moving to relax C — the escalating constraint force the legacy stack blew up on (physics.md
-// "legacy antipatterns"). The fix is at the dual update: a contact NO dynamic body can resolve
+// moving to relax C — the escalating constraint force the legacy stack blew up on. The fix is at the dual update: a contact NO dynamic body can resolve
 // must not ramp. Validated here (red without the gate: the penalty escalates), bounded with it.
 
 const maxNormalPenalty = (s: Solver): number => {
