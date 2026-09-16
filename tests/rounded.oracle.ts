@@ -238,8 +238,8 @@ check(
 );
 
 check(
-    "mixed rounded × box now produces a contact (Phase 6.3 rounded-box)",
-    { claim: "rounded: mixed rounded × box now produces a contact (Phase 6.3 rounded-box)" },
+    "mixed rounded × box produces a contact",
+    { claim: "rounded: mixed rounded × box produces a contact" },
     () => {
         const s = sphere(0.5, 1, 0.5, [0, 1.4, 0]); // above the box top face (y = 1)
         const boxB = unitBox();
@@ -509,9 +509,6 @@ check(
 // spun up (with friction). iters-independent (a formulation bug), so testing at the oracle iters=10 is
 // representative; energy is the one-sided invariant the bug violates (it INJECTS energy).
 
-const ConservationGroundTop = 0.5;
-const conservationRestY = (r: number): number => ConservationGroundTop + r - COLLISION_MARGIN;
-
 // total mechanical energy: ½m‖v‖² + ½ωᵀIω + mg·y (g the magnitude). A passive contact is dissipative
 // at worst — energy must be non-increasing. The bug makes it grow without bound.
 const energy = (b: Body, g: number): number =>
@@ -544,7 +541,7 @@ check(
         const omega = 2; // spin about Z — the rolling-mode axis the bug coupled through the normal path
         const s = makeSolver([
             body([100, 1, 100], 0, 0, [0, 0, 0]), // static box ground, μ=0
-            sphere(0.5, 1, 0, [0, conservationRestY(0.5), 0]), // resting at the margin rest, μ=0
+            sphere(0.5, 1, 0, [0, restY(0.5), 0]), // resting at the margin rest, μ=0
         ]);
         s.bodies[1].velAng = [0, 0, omega];
         const e0 = energy(s.bodies[1], s.params.gravity);
@@ -552,7 +549,7 @@ check(
         const b = s.bodies[1];
 
         expect(Number.isFinite(b.posLin[1])).toBe(true);
-        expect(Math.abs(b.posLin[1] - conservationRestY(0.5))).toBeLessThan(1e-2); // didn't sink or tunnel (the bug: y → −77)
+        expect(Math.abs(b.posLin[1] - restY(0.5))).toBeLessThan(1e-2); // didn't sink or tunnel (the bug: y → −77)
         expect(length(b.velLin)).toBeLessThan(1e-3); // μ=0 ⇒ no tangential force ⇒ the spin can't move it
         // the contact is angularly transparent: |ω| matches the free-spin reference (the only ω change is
         // the integrator's, shared with a contactless sphere) — neither spun up (bug) nor extra-damped.
@@ -575,7 +572,7 @@ check(
         const vx = 1;
         const s = makeSolver([
             body([200, 1, 200], 0, 1, [0, 0, 0]), // static box ground, μ=1
-            sphere(r, 1, 1, [0, conservationRestY(r), 0], [vx, 0, 0]),
+            sphere(r, 1, 1, [0, restY(r), 0], [vx, 0, 0]),
         ]);
         s.bodies[1].velAng = [0, 0, -vx / r]; // matched spin → contact point stationary
         const e0 = energy(s.bodies[1], s.params.gravity);
@@ -584,7 +581,7 @@ check(
         const b = s.bodies[1];
 
         expect(Number.isFinite(b.posLin[1])).toBe(true);
-        expect(Math.abs(b.posLin[1] - conservationRestY(r))).toBeLessThan(1e-2); // stays on the ground
+        expect(Math.abs(b.posLin[1] - restY(r))).toBeLessThan(1e-2); // stays on the ground
         expect(b.posLin[0] - x0).toBeGreaterThan(2); // actually rolled forward (~vx·200·dt ≈ 3.3 m)
         // contact-point velocity stays ≈ 0 — the no-slip condition holds frame to frame
         const contactVel = add(b.velLin, cross(b.velAng, [0, -r, 0]));
@@ -685,10 +682,7 @@ check(
         near(length(n), 1);
         expect(dot(n, sub(s.posLin, xB))).toBeGreaterThan(0);
         // xB lies on the tet boundary: no face strictly in front of it (within ε)
-        for (const v of [xB]) {
-            const local = [v[0], v[1], v[2]] as Vec3;
-            expect(local[1]).toBeLessThanOrEqual(0.5 + 1e-6); // the tet's top is y = 0.5
-        }
+        expect(xB[1]).toBeLessThanOrEqual(0.5 + 1e-6); // the tet's top is y = 0.5
         // penetrating a touch: the signed gap is the reconstructed surface gap
         expect(dot(n, sub(xA, xB))).toBeLessThan(0);
         expect(dot(n, sub(xA, xB))).toBeGreaterThan(-0.2);
@@ -699,7 +693,6 @@ check(
 // a sphere dropped onto a box-HULL ground settles at the same margin rest as on a box (the hull path is
 // the box path), and a capsule on a tet-pyramid-style hull settles — the rounded × hull pipeline end to
 // end (broadphase by the hull bounding radius → narrowphase → the contact Force → BDF1 settle).
-const CollMargin = 0.01;
 check(
     "sphere settles on a box-hull ground (same rest as a box)",
     { claim: "rounded: sphere settles on a box-hull ground (same rest as a box)" },
@@ -712,7 +705,7 @@ check(
         const ball = s.bodies[1];
         expect(length(ball.velLin)).toBeLessThan(1e-3);
         expect(length(ball.velAng)).toBeLessThan(5e-2); // no spurious spin (fresh arms on the hull pair)
-        expect(Math.abs(ball.posLin[1] - (0.5 + 0.5 - CollMargin))).toBeLessThan(2e-3);
+        expect(Math.abs(ball.posLin[1] - restY(0.5))).toBeLessThan(2e-3);
     },
 );
 
