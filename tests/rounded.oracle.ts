@@ -415,7 +415,7 @@ const restY = (radius: number): number => GroundTop + radius - COLLISION_MARGIN;
 
 check(
     "sphere settles on a flat box ground",
-    { claim: "rounded: sphere settles on a flat box ground" },
+    { claim: "rounded: sphere settles on a flat box ground", size: "integration", budget: 20000 },
     () => {
         const s = makeSolver([
             body([10, 1, 10], 0, 0.5, [0, 0, 0]), // static box ground, top at y = 0.5
@@ -433,6 +433,8 @@ check(
     "tilted capsule settles flat on a flat box ground (the two-contact rest is stable)",
     {
         claim: "rounded: tilted capsule settles flat on a flat box ground (the two-contact rest is stable)",
+        size: "integration",
+        budget: 20000,
     },
     () => {
         // dropped with a small tilt → it rotates to level as it settles; the two endpoint contacts
@@ -457,7 +459,11 @@ check(
 // the sphere tunnels straight through the box (y → −300+ in 200 frames); fresh arms keep it on top.
 check(
     "rolling sphere stays on the box (fresh arms — does not tunnel through)",
-    { claim: "rounded: rolling sphere stays on the box (fresh arms — does not tunnel through)" },
+    {
+        claim: "rounded: rolling sphere stays on the box (fresh arms — does not tunnel through)",
+        size: "integration",
+        budget: 20000,
+    },
     () => {
         const s = makeSolver([
             body([100, 1, 100], 0, 1.0, [0, 0, 0]), // big static box ground, top at y = 0.5
@@ -478,7 +484,11 @@ check(
 // end: broadphase (shape-aware bound) → narrowphase → the contact Force → BDF1 settle.
 check(
     "sphere rests on a static sphere ground",
-    { claim: "rounded: sphere rests on a static sphere ground" },
+    {
+        claim: "rounded: sphere rests on a static sphere ground",
+        size: "integration",
+        budget: 20000,
+    },
     () => {
         const groundR = 5;
         const s = makeSolver([
@@ -536,6 +546,8 @@ check(
     "frictionless spinning sphere is angularly transparent (no spin-up, no tunnel, no drift)",
     {
         claim: "rounded: frictionless spinning sphere is angularly transparent (no spin-up, no tunnel, no drift)",
+        size: "integration",
+        budget: 20000,
     },
     () => {
         const omega = 2; // spin about Z — the rolling-mode axis the bug coupled through the normal path
@@ -562,6 +574,8 @@ check(
     "sphere rolling without slipping coasts at constant v (no spin-up, energy conserved)",
     {
         claim: "rounded: sphere rolling without slipping coasts at constant v (no spin-up, energy conserved)",
+        size: "integration",
+        budget: 20000,
     },
     () => {
         // start already in the rolling-without-slipping state: contact-point velocity v + ω×(−r·n) = 0.
@@ -695,7 +709,11 @@ check(
 // end (broadphase by the hull bounding radius → narrowphase → the contact Force → BDF1 settle).
 check(
     "sphere settles on a box-hull ground (same rest as a box)",
-    { claim: "rounded: sphere settles on a box-hull ground (same rest as a box)" },
+    {
+        claim: "rounded: sphere settles on a box-hull ground (same rest as a box)",
+        size: "integration",
+        budget: 20000,
+    },
     () => {
         const s = makeSolver([
             hull(boxHull([10, 1, 10]), 0, 0.5, [0, 0, 0]), // static hull ground, top at y = 0.5

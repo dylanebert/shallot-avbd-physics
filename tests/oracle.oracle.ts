@@ -636,8 +636,6 @@ check(
         "a grossly non-coincident joint fails loudly at construction (the rope-explosion footgun)",
         {
             claim: "non-coincident joints refuse at construction",
-            size: "integration",
-            budget: 20000,
         },
         () => {
             // Reproduces the legacy rope bug + proves the guard catches it. A rigid joint whose anchors start far
@@ -656,8 +654,6 @@ check(
         "a joint between two non-dynamic bodies fails loudly at construction (the both-static energy guard)",
         {
             claim: "all-static joints refuse while static anchors remain valid",
-            size: "integration",
-            budget: 20000,
         },
         () => {
             // A joint no dynamic body can resolve — both endpoints mass ≤ 0 (static/kinematic) — is never satisfied

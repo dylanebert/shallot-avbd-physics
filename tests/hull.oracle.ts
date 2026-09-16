@@ -244,7 +244,11 @@ check(
 // (the hull bounding radius broadphase → collideHull → the contact Force → BDF1 settle).
 check(
     "a box-hull rests on a box ground at the margin rest",
-    { claim: "hull solver settles a box-hull at the collision margin" },
+    {
+        claim: "hull solver settles a box-hull at the collision margin",
+        size: "integration",
+        budget: 20000,
+    },
     () => {
         const s = makeSolver([
             body([10, 1, 10], 0, 0.5, [0, 0, 0]), // static box ground, top at y = 0.5
@@ -260,7 +264,7 @@ check(
 
 check(
     "two box-hulls stack on a box ground",
-    { claim: "hull solver settles two stacked box-hulls" },
+    { claim: "hull solver settles two stacked box-hulls", size: "integration", budget: 20000 },
     () => {
         const s = makeSolver([
             body([10, 1, 10], 0, 0.5, [0, 0, 0]),
