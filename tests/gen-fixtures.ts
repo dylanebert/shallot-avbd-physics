@@ -5,7 +5,7 @@
 //   budget/    — 4 iters, betaLin 1e5                                    — perf tuning
 //
 // Output lands in `tests/fixtures/{canonical,budget}/dense-<scene>.json`, which is
-// gitignored (regenerable). Run before the fixture-parity gates in oracle.test.ts.
+// gitignored (regenerable).
 //
 // Usage: AVBD_DEMO3D_DIR=/absolute/path bun run tests/gen-fixtures.ts [frames]
 //        (default 600). Requires: g++ on PATH.
