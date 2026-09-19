@@ -10,12 +10,10 @@
 // mapping, usage validation, and alignment. `Avbd.step.bodies` is the solver's SoA buffer, and the
 // imported B_* indices keep probe offsets aligned with the solver layout.
 //
-// Request this oracle from the AVBD repository root with
-// `bun test ./tests/headless.oracle.ts`. The current AVBD preloads install the TypeGPU transform and
-// Shallot declaration carrier only; they do not install a software adapter. Each declaration requires
-// `gpu`, and the pinned carrier has no GPU provider, so the command currently refuses nonzero before
-// the bodies run rather than passing or skipping. Ordinary unit and integration sweeps exclude
-// `.oracle.ts` files.
+// These are integration rows that require `gpu`. The current AVBD preloads install the TypeGPU
+// transform and Shallot declaration carrier only; they do not install a software adapter, and the
+// pinned carrier has no GPU provider, so the integration sweep refuses nonzero before the bodies run
+// rather than passing or skipping.
 
 import { expect } from "bun:test";
 import {
@@ -87,6 +85,7 @@ check(
         claim: "gpu headless avbdplugin builds, steps, and probes finite body poses at capacity 8192",
         size: "integration",
         requires: ["gpu"],
+        subject: ["src/index.ts", "src/step.ts", "src/collide.ts", "tests/headless.test.ts"],
     },
     async () => {
         const app = await build({
@@ -113,7 +112,7 @@ check(
         // authored start — a band derived from free-fall kinematics, never from the observed value.
         // The floor is the same derivation's other side, on the discrete scheme the solver actually
         // runs: symplectic Euler (velocity first, then position), whose closed form the oracle pins as
-        // x_n = x0 + g·h²·n(n+1)/2 per integrated tick (tests/oracle.oracle.ts). The seeding
+        // x_n = x0 + g·h²·n(n+1)/2 per integrated tick (tests/oracle.test.ts). The seeding
         // precondition is what fixes n: the first tick's draw-group pack seeds the box's slot (authored
         // pose, velocity zeroed) and lands no observable integration, so TICKS − 1 = 4 ticks integrate
         // — five ticks of free fall cover Δy = g·h²·n(n+1)/2 at g = 10, h = 1/60, n = 4 ≈ 0.0278 m
@@ -134,6 +133,7 @@ check(
         claim: "gpu headless characterplugin sweeps headlessly at the same capacity",
         size: "integration",
         requires: ["gpu"],
+        subject: ["src/index.ts", "src/step.ts", "src/collide.ts", "tests/headless.test.ts"],
     },
     async () => {
         const app = await build({
@@ -162,7 +162,7 @@ check(
         // tuned. The floor is the same derivation's other side, on the discrete scheme the sweep
         // actually runs: symplectic Euler (velocity first, then position — the runtime twin of the
         // oracle's moveCharacter), whose closed form the oracle pins as x_n = x0 + g·h²·n(n+1)/2 per
-        // integrated tick (tests/oracle.oracle.ts). The seeding precondition is what fixes n,
+        // integrated tick (tests/oracle.test.ts). The seeding precondition is what fixes n,
         // differently than the box: the sweep's velocity is persistent CPU-side state and integrates
         // from the first tick, but the first tick's draw-group pack seed overwrites the slot with the
         // authored pose (the readback shows 3 at tick 1; the sweep's own trajectory has already moved
@@ -184,6 +184,7 @@ check(
         claim: "gpu headless playerplugin composes headlessly at the same capacity",
         size: "integration",
         requires: ["gpu"],
+        subject: ["src/index.ts", "src/step.ts", "src/collide.ts", "tests/headless.test.ts"],
     },
     async () => {
         const app = await build({

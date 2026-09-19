@@ -11,11 +11,9 @@ import {
 } from "../src/step";
 import { type Body, body } from "./rigid";
 
-// Named GPU oracle. Request it from this repository root with
-// `bun test ./tests/differential.oracle.ts`. Its body needs a compatible `navigator.gpu` device,
-// but the pinned carrier does not supply the `gpu` requirement, so the command currently refuses
-// nonzero before the body runs rather than passing or skipping. Ordinary unit and integration sweeps
-// exclude `.oracle.ts` files.
+// An integration row that requires `gpu`. Its body needs a compatible `navigator.gpu` device, but
+// the pinned carrier does not supply the `gpu` requirement, so the integration sweep refuses nonzero
+// before the body runs rather than passing or skipping.
 
 const CAPACITY = 8;
 const DT = Math.fround(1 / 60);
@@ -55,6 +53,7 @@ check(
         claim: "gpu differential execution produces the intended contact and a geometry-bounded pose",
         size: "integration",
         requires: ["gpu"],
+        subject: ["src/step.ts", "src/collide.ts", "tests/differential.test.ts"],
     },
     async () => {
         const previousCompute = { ...Compute };

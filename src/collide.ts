@@ -7,7 +7,7 @@
 //
 // This is the SAT crux (avbd.md "Reference-fidelity"): the feature keys it emits feed warmstart, so
 // they must be bit-identical to the C++. The CPU SAT is validated against the gold vectors in
-// tests/sat.oracle.ts; the gym `sat` kernel gate runs this WGSL against that oracle on the real
+// tests/sat.test.ts; the gym `sat` kernel gate runs this WGSL against that oracle on the real
 // GPU, and the gym `pile` scenario is the full-pipeline home.
 //
 // The narrowphase is SIX chunks, each a lazily-resolved thunk so a pipeline compiles only the SAT it
@@ -27,7 +27,7 @@
 // Every SAT is CPU-callable, pointers and all: a local passed to a `ptr<function, …>`
 // param goes through `d.ref(x)`, which types it, emits the same `(&x)`, and gives the CPU arm the
 // reference semantics `.$` needs. So `collideBoxBox` runs against the C++ gold vectors in
-// tests/sat.oracle.ts, `collideRounded` against rounded.oracle.ts, and `collideHull` against the f64
+// tests/sat.test.ts, `collideRounded` against rounded.test.ts, and `collideHull` against the f64
 // hull oracle. The seven hull-data readers are duals: WGSL reads the consumer-declared storage binding,
 // while the scoped CPU arm reads the exact packed `Uint32Array`. Neither CPU arm can see f32
 // reassociation (it runs on f64 JS numbers), so the emitted-WGSL differential stays the guard for op order.
@@ -257,7 +257,7 @@ const preferReduce = tgpu
 // corroborates). Project each A-anchor onto the contact plane (perp axis, relative to comA), keep the
 // point maximizing (planar dist)²·depth², its farthest plane-partner, then the furthest candidate on
 // EACH side of that line (max quad area). Mirrors tests/collide.ts reduceManifold; gold-gated by
-// reduce.oracle.ts. Writes the kept candidate indices to sel, returns the kept count (2-4).
+// reduce.test.ts. Writes the kept candidate indices to sel, returns the kept count (2-4).
 const pruneContacts = tgpu
     .fn(
         [
@@ -761,7 +761,7 @@ const edgeContact = tgpu
  * Manifold::collide. `dRel` is the relative displacement over the step (vA−vB)·dt — the velocity sweep
  * (Phase 4.8.4); zero recovers the static 4.8.3 SAT. `size` is the full box width (2 × half-extents).
  *
- * @internal Exported for the CPU differential (`tests/sat.oracle.ts` runs it against the C++ gold
+ * @internal Exported for the CPU differential (`tests/sat.test.ts` runs it against the C++ gold
  * vectors), not for a consumer: the WGSL a consumer wants is {@link boxBoxWgsl}.
  */
 export const collideBoxBox = tgpu
@@ -917,7 +917,7 @@ export function boxBoxWgsl(): string {
  * pair, then subtract the radii into one contact. `size` is the core full-width (segment =
  * pos ± rotate(quat, size·0.5)); `radius` the rounding. `dRel` = (vA−vB)·dt is the velocity sweep.
  *
- * @internal Exported for the CPU differential (`tests/rounded.oracle.ts`), like
+ * @internal Exported for the CPU differential (`tests/rounded.test.ts`), like
  * {@link collideBoxBox}; a consumer splices {@link roundedWgsl}.
  */
 export const collideRounded = tgpu

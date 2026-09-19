@@ -68,7 +68,7 @@ const GAMMA = 0.999;
 // is a deliberate ship tradeoff, not a bug. Production ships 6: it settles a 10-storey stack (the collapse
 // showcase wall) where 4 (the paper's count) under-converges and pancakes during the settle, ~1ms@1k on
 // lovelace (0.996ms measured, vs 0.575 at 4). The f64 oracle + GPU gates VALIDATE at iters=10
-// (corpus.oracle.ts, the gym seeded gates), where the math is proven correct independent of this ship
+// (corpus.test.ts, the gym seeded gates), where the math is proven correct independent of this ship
 // value. Raise per-scene via `Avbd.step.configure` for a known-harder pile. physics.md "f32 precision"
 // / "iters is a free knob".
 const ITERATIONS = 6;

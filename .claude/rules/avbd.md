@@ -10,7 +10,7 @@ Outside GPU solver: `AvbdPlugin`; escape: `Avbd.step`. It reaches shallot only t
 
 ## The oracle is the spec
 
-GPU is wrong until ruled out: the oracle is not the suspect. Never lower it to f32. Physics changes run their oracle rows by claim through `bun run test -- --oracle <claim>` (`bun run list` names them); real-device correctness/compile/perf use gym `pile`, hull kernels use `sat`. `tests/headless.oracle.ts` is by-path build/lifecycle evidence, never solver parity.
+GPU is wrong until ruled out: the oracle is not the suspect. Never lower it to f32. Physics changes run the oracle rows through `bun run test` (`bun run list` names them); real-device correctness/compile/perf use gym `pile`, hull kernels use `sat`. `tests/headless.test.ts` is gpu build/lifecycle evidence, never solver parity.
 
 Gate closed forms, then identical-start single-step GPU/oracle equality at derived tolerance; statistical energy/penetration/finite bands only for chaotic long horizons. Test hard topologies isolated near origin; diagnose coordinate cancellation by translation. Iterations tune performance, never relax parity: all six corpus topologies and gym gates stay at 10 independently of shipping iterations; per-step math must agree at any count.
 

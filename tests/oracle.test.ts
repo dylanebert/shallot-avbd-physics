@@ -11,7 +11,7 @@ import { spring } from "./spring";
 // The phase-0 standing gate: the TS oracle is the executable AVBD spec. Tolerances are derived
 // + checked (the values in the comments were measured against the oracle, not guessed), and the
 // gate holds closed-form rows (tightest, no reference) and the scheduler bridge. Scene invariants
-// live in corpus.oracle.ts; the C++ fixture-parity rows were cut because their generated fixtures
+// live in corpus.test.ts; the C++ fixture-parity rows were cut because their generated fixtures
 // are not committed and cannot run here.
 
 // total mechanical energy in the solver's own convention (world-frame diagonal inertia, matching
