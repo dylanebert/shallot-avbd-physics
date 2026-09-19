@@ -279,8 +279,6 @@ check(
     "pose / velocity / grounded match across the behavioral scenes",
     {
         claim: "CPU character sweep matches f64 oracle across bounded scenes",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         let mp = 0;
@@ -310,7 +308,7 @@ check(
 
 check(
     "drop-to-rest: settles on the floor, grounded, no residual jitter",
-    { claim: "CPU character sweep settles on the floor", size: "integration", budget: 20000 },
+    { claim: "CPU character sweep settles on the floor" },
     () => {
         const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 3, 0])));
         const ss = [sweepBody(ground([0, 0, 0]))];
@@ -328,8 +326,6 @@ check(
     "slope: 30° holds (walkable), 60° slides (too steep)",
     {
         claim: "CPU character sweep separates walkable and steep slopes",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         const slide = (deg: number): number => {
@@ -358,8 +354,6 @@ check(
     "step-up climbs a sub-radius step; a tall wall stops the char (bounded, no jitter)",
     {
         claim: "CPU character sweep climbs steps and stops at walls",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // step-up onto the plateau (near face x = 3)
@@ -403,7 +397,7 @@ check(
 
 check(
     "jump: spam → single jump per landing, bounded apex (no double-jump)",
-    { claim: "CPU character sweep bounds repeated jump input", size: "integration", budget: 20000 },
+    { claim: "CPU character sweep bounds repeated jump input" },
     () => {
         const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0]), 50, JUMP));
         const ss = [sweepBody(ground([0, 0, 0]))];
@@ -429,8 +423,6 @@ check(
     "coyote: a jump pressed just after walking off a ledge still fires",
     {
         claim: "CPU character sweep preserves coyote jump timing",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0.5, restY, 0]), 50, JUMP));
@@ -454,8 +446,6 @@ check(
     "buffer: a jump pressed just before landing fires on touchdown",
     {
         claim: "CPU character sweep preserves buffered touchdown jumps",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         const sc = charState(
@@ -512,8 +502,6 @@ check(
     "cull == brute, bit-exact, across the behavioral scene shapes",
     {
         claim: "CPU character sweep cull matches brute behavioral scenes",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         const stepUp = divergence(
@@ -555,8 +543,6 @@ check(
     "far bodies culled / overflow flagged / guard tripped",
     {
         claim: "CPU character sweep reports gather cull overflow and guard",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         const diag = (): SweepDiag => ({ candidates: 0, overflow: false, guard: false });

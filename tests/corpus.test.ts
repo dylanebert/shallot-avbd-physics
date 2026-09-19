@@ -60,6 +60,7 @@ check(
     {
         claim: "bounded topology corpus remains finite, settled, and non-tunneling",
         size: "integration",
+        subject: ["tests/solver.ts", "tests/corpus.ts", "tests/collide.ts", "tests/corpus.test.ts"],
         budget: 20000,
     },
     () => {

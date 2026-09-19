@@ -40,8 +40,6 @@ check(
     "free-fall matches the exact discrete symplectic-Euler trajectory",
     {
         claim: "free-fall follows the exact symplectic-Euler trajectory",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // no ground ⇒ no contact: the body lands on its inertial target each step, giving
@@ -70,7 +68,7 @@ check(
 
 check(
     "substeps = N is exactly N sub-steps of h = dt/N (the small-steps definition)",
-    { claim: "substeps preserve the small-steps definition", size: "integration", budget: 20000 },
+    { claim: "substeps preserve the small-steps definition" },
     () => {
         // one step at substeps=N must equal N manual steps at dt/N with substeps=1 — every dt-bearing
         // term (inertial init, M/h², BDF1 velocity, the velocity-sweep band) uses h, and the manifold
@@ -106,8 +104,6 @@ check(
     "resting box penetration = mg/(nc·K) (penalty layer, α=0)",
     {
         claim: "penalty resting penetration follows the mg over contact-stiffness law",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // Penalty layer with α=0: at rest the constraint is C = C0 and the dq terms vanish, so the
@@ -146,8 +142,6 @@ check(
     "dual layer ramps the penalty to hold the box near the margin, not the seed floor",
     {
         claim: "dual penalty ramp holds a resting box at the collision margin",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // The Phase-2 gate (roadmap "resting penetration → 0"): λ accumulation + the within-frame
@@ -203,8 +197,6 @@ check(
     "static friction holds on a 30° ramp iff μ ≥ tan 30°",
     {
         claim: "static friction separates walkable and sliding ramp regimes",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // Coulomb cone: a box on a θ ramp stays static iff μ ≥ tan θ. Both surfaces friction = μ
@@ -250,8 +242,6 @@ check(
     "speculative contact stops a fast in-band box at the surface (no penetration pop / tunnel)",
     {
         claim: "speculative contacts stop fast boxes inside the static band",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // Phase 4.8.3: the SAT generates a contact while the boxes are still separated by up to
@@ -294,8 +284,6 @@ check(
     "velocity sweep catches a fast box beyond the static band; a static box at the same gap is untouched",
     {
         claim: "velocity sweep catches fast boxes without sweeping static boxes",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // Phase 4.8.4: the static band (4.8.3) only generates a contact within SPECULATIVE_DISTANCE at
@@ -376,8 +364,6 @@ check(
         "static extension is mg/k — the exact fixed point, and the attractor from a displaced start",
         {
             claim: "spring fixed point and attraction follow mg over stiffness",
-            size: "integration",
-            budget: 20000,
         },
         () => {
             // Phase 1 — the equilibrium is the AVBD fixed point. Placed at yEq the spring force k·ext = mg
@@ -410,8 +396,6 @@ check(
         "oscillates at ω = √(k/m) — the exact BDF1 discrete period",
         {
             claim: "spring oscillation follows the BDF1 discrete period",
-            size: "integration",
-            budget: 20000,
         },
         () => {
             // Phase 2 closed form: displaced and released, the block is a damped harmonic oscillator. BDF1 on
@@ -471,8 +455,6 @@ check(
         "spherical-joint pendulum swings at the physical-pendulum period 2π√(I_pivot/(m·g·d))",
         {
             claim: "spherical joint pendulum follows the physical period",
-            size: "integration",
-            budget: 20000,
         },
         () => {
             // A bob pinned by a spherical joint d from its COM is a physical pendulum: gravity torques it about
@@ -543,8 +525,6 @@ check(
         "a spherical joint leaves rotation free; a fixed joint locks it (a static anchor pins a body rigid)",
         {
             claim: "spherical and fixed joints separate free and locked rotation",
-            size: "integration",
-            budget: 20000,
         },
         () => {
             // Same 2-body rig — a dynamic box pinned to a static anchor at a 2 m arm — under gravity. The angular
@@ -578,8 +558,6 @@ check(
         "a finite-intermediate stiffnessAng settles to a pinned rest, not free-fall (mirroring physics's 1000-case)",
         {
             claim: "finite joint angular stiffness pins and settles the body",
-            size: "integration",
-            budget: 20000,
         },
         () => {
             // S2 grant arm: a legitimate finite-positive stiffnessAng (1000) still builds a joint under AVBD —
@@ -675,8 +653,6 @@ check(
         "the grab dangles from a world anchor without injecting energy; a kinematic-anchor BODY flails",
         {
             claim: "world-anchor grabs damp without kinematic-anchor energy injection",
-            size: "integration",
-            budget: 20000,
         },
         () => {
             // avbd-demo3d's mouse-drag grab pins the box to a WORLD-space anchor (a = null, rA the cursor point) by a
@@ -771,6 +747,7 @@ check(
         {
             claim: "reverse-rank coloring preserves sequential results",
             size: "integration",
+            subject: ["tests/solver.ts", "tests/coloring.ts", "tests/oracle.test.ts"],
             budget: 20000,
         },
         () => {
@@ -795,6 +772,7 @@ check(
         {
             claim: "valid coloring preserves the sequential settled solution",
             size: "integration",
+            subject: ["tests/solver.ts", "tests/coloring.ts", "tests/oracle.test.ts"],
             budget: 20000,
         },
         () => {
@@ -846,6 +824,12 @@ check(
     {
         claim: "warmstart settles a chain with fewer iterations than cold reset",
         size: "integration",
+        subject: [
+            "tests/solver.ts",
+            "tests/manifold.ts",
+            "tests/collide.ts",
+            "tests/oracle.test.ts",
+        ],
         budget: 20000,
     },
     () => {
@@ -873,8 +857,6 @@ check(
     "churning contacts (tipping box): energy non-increasing, no λ blow-up, settles flat",
     {
         claim: "churning contact keys remain finite and settle the tipping box",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // A box tilted ~40° about z, dropped from rest onto the ground. It lands on an edge, tips, and
@@ -933,8 +915,6 @@ check(
     "a kinematic capsule held into a static wall does NOT ramp the penalty (both mass ≤ 0)",
     {
         claim: "all-static kinematic contact penalties do not ramp",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // A static box wall + a capsule character (mass 0 = kinematic) overlapping its +x face. Both are
@@ -971,7 +951,7 @@ check(
 
 check(
     "a DYNAMIC box on the same wall still ramps — the gate is specific to the all-static contact",
-    { claim: "dynamic contacts retain their penalty ramp", size: "integration", budget: 20000 },
+    { claim: "dynamic contacts retain their penalty ramp" },
     () => {
         // The fix must not silence a real resting contact. A dynamic box settling on a static ground has a
         // dynamic body, so its dual ramp is untouched: the penalty climbs well off the seed to hold mg

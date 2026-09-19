@@ -27,7 +27,7 @@ const ground = (pos: Vec3, quat: Quat = [0, 0, 0, 1]) =>
 
 check(
     "drop-to-rest: a capsule falls and settles with its surface on flat ground, grounded",
-    { claim: "character capsule settles on flat ground", size: "integration", budget: 20000 },
+    { claim: "character capsule settles on flat ground" },
     () => {
         const floor = ground([0, 0, 0]); // top at y = 0.5
         const ch = character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 3, 0]));
@@ -48,8 +48,6 @@ check(
     "slope-limit: holds on a walkable slope (30° < 45° cutoff), slides on a too-steep one (60°)",
     {
         claim: "character slope limit separates walkable hold from slide",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // maxSlope 45° → cos 0.707. A 30° slope (normal.y = cos30 = 0.866 > cutoff) is walkable: the char
@@ -83,8 +81,6 @@ check(
     "step-up: the rounded bottom climbs a sub-radius step but a tall wall stops it (bounded, no jitter)",
     {
         claim: "rounded character climbs sub-radius steps and stops at tall walls",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         const floor = ground([0, 0, 0]); // top at y = 0.5
@@ -133,8 +129,6 @@ check(
     "a kinematic capsule driven into a static wall stays bounded (no escalation, no tunnel, no jitter)",
     {
         claim: "kinematic character wall contact stays bounded in the solver",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // The §6.4 headline, end to end: the character is a mass ≤ 0 capsule in the solver's body list, its
@@ -189,8 +183,6 @@ check(
     "rides a horizontally translating platform (tracks its x)",
     {
         claim: "character carries horizontally with a moving platform",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         const V = 1.5; // platform speed m/s
@@ -215,8 +207,6 @@ check(
     "a descending platform produces the carry's realized velocity (snap alone leaves it 0)",
     {
         claim: "character realizes descending platform carry velocity",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // vertical POSITION tracking is masked by the ground snap (within its band the snap glues the char
@@ -243,8 +233,6 @@ check(
     "shoves a light box ahead at walking speed without overtaking it",
     {
         claim: "character transfers walking speed to a pushed box",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // a char at the floor walks +x at 3 m/s into a light box ahead of it. The box is NOT swept against
@@ -273,8 +261,6 @@ check(
     "walking into a dynamic box's side is blocked at the face — never pops on top",
     {
         claim: "dynamic box side contact blocks character without vertical pop",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // the report: walking into a chest-high dynamic crate teleported the char on top of it. The old sweep
@@ -306,8 +292,6 @@ check(
     "jumping into a tall dynamic box's side slides off — never lands on top",
     {
         claim: "airborne dynamic box side contact slides without top landing",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // the report's other shape: jumping into a dynamic body went through it and landed on top. With side
@@ -338,8 +322,6 @@ check(
     "stands ON a dynamic box (a walkable contact supports it) instead of sinking through",
     {
         claim: "walkable dynamic box contact supports the character",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // the regression: a char dropped onto a DYNAMIC box (passed in `push`, like the full-speed shove) fell
@@ -411,6 +393,7 @@ check(
     {
         claim: "character cull preserves bounded behavioral scene results",
         size: "integration",
+        subject: ["tests/character.ts", "tests/hull.ts", "tests/character.test.ts"],
         budget: 20000,
     },
     () => {
@@ -478,6 +461,7 @@ check(
     {
         claim: "seeded character cull preserves randomized sweep results",
         size: "integration",
+        subject: ["tests/character.ts", "tests/hull.ts", "tests/character.test.ts"],
         budget: 20000,
     },
     () => {
@@ -514,7 +498,7 @@ check(
 
 check(
     "far bodies are culled (the gather actually culls)",
-    { claim: "character gather culls far bodies", size: "integration", budget: 20000 },
+    { claim: "character gather culls far bodies" },
     () => {
         const d = diag();
         const ch = character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 1.3, 0]));
@@ -531,8 +515,6 @@ check(
     "re-gather: a fast platform's carry widens the band to include a body the provisional gather missed",
     {
         claim: "character re-gather includes bodies reached by platform carry",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // provisional band (groundVel unknown) keeps a small box only within ~1.96 m; the platform carry
@@ -552,8 +534,6 @@ check(
     "overflow: >64 candidates keeps the first 64 in scan order and flags loudly",
     {
         claim: "character gather reports and preserves its bounded overflow policy",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         let seed = 7;
@@ -603,8 +583,6 @@ check(
     "guard: spawning deep inside geometry trips the displacement guard, stays finite",
     {
         claim: "character displacement guard refuses deep geometry escape",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         const d = diag();
@@ -627,8 +605,6 @@ check(
     "spam jump: one jump per landing, never double-jumps (bounded apex)",
     {
         claim: "character jump input permits one bounded jump per landing",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // holding/spamming the jump button must yield a SINGLE jump per ground contact — the coyote credit is
@@ -660,8 +636,6 @@ check(
     "coyote: a jump pressed just after walking off a ledge still fires",
     {
         claim: "character coyote jump fires after leaving a ledge",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // a small platform (top y 0.5, +x edge at x = 1); walk +x off it. A jump pressed on the first airborne
@@ -687,7 +661,7 @@ check(
 
 check(
     "buffer: a jump pressed just before landing fires on touchdown",
-    { claim: "character jump buffer fires on touchdown", size: "integration", budget: 20000 },
+    { claim: "character jump buffer fires on touchdown" },
     () => {
         // drop the capsule a short way; press jump ONCE while descending close to the ground (a few frames
         // before landing), then release. The buffered press must survive to touchdown and fire the jump there —

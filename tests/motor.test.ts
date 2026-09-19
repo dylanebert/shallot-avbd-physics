@@ -23,8 +23,6 @@ check(
     "a motor spins a free rotor up to its target ω and holds it",
     {
         claim: "angular motor reaches and holds its target speed",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // A unit box pinned at its COM by a world spherical joint (rotation free) + a Y motor, no gravity. The
@@ -56,8 +54,6 @@ check(
     "the torque clamp bounds the spin-up rate at maxTorque / I",
     {
         claim: "angular motor torque clamp bounds spin-up acceleration",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // Same rotor, but a SMALL clamp. While behind target the force saturates at maxTorque, so the angular
@@ -92,8 +88,6 @@ check(
     "against a gravity load the clamp decides lap (strong) vs stall (weak) — sceneMotor",
     {
         claim: "motor torque separates gravity-loaded lap and stall",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // A bar pinned at one end (world spherical), motored about Z against gravity (the reference scene). Peak
@@ -137,8 +131,6 @@ check(
     "a motor between two free bodies drives their relative ω, splitting it equal-and-opposite",
     {
         claim: "two-body motor preserves relative speed and momentum split",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         // Both endpoints dynamic (a hinge motor, the two-body path the world-anchor tests never reach: isA both

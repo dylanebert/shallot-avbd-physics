@@ -246,8 +246,6 @@ check(
     "a box-hull rests on a box ground at the margin rest",
     {
         claim: "hull solver settles a box-hull at the collision margin",
-        size: "integration",
-        budget: 20000,
     },
     () => {
         const s = makeSolver([
@@ -264,7 +262,12 @@ check(
 
 check(
     "two box-hulls stack on a box ground",
-    { claim: "hull solver settles two stacked box-hulls", size: "integration", budget: 20000 },
+    {
+        claim: "hull solver settles two stacked box-hulls",
+        size: "integration",
+        subject: ["tests/solver.ts", "tests/hull.ts", "tests/rounded.ts", "tests/hull.test.ts"],
+        budget: 20000,
+    },
     () => {
         const s = makeSolver([
             body([10, 1, 10], 0, 0.5, [0, 0, 0]),
