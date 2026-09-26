@@ -1,8 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative, resolve } from "node:path";
 import { check } from "@dylanebert/shallot/harness/check";
 
-const CANDIDATE_SHA = "0664218f465224397b80aeb604b51178ac71cfb2";
+const CANDIDATE_SHA = "69f12a06438d8ce80aa1ab9e4b34de5b58820e15";
 const CANDIDATE_TAG = `dylanebert-shallot-${CANDIDATE_SHA.slice(0, 7)}`;
 
 interface CommandResult {
@@ -49,7 +50,6 @@ check(
             "AGENTS.md",
             "README.md",
             "shallot.json",
-            "tests/package-preflight.test.ts",
             ".github/workflows/test-surface.yml",
         ],
         budget: 20000,
@@ -72,9 +72,10 @@ check(
             throw new Error("bun.lock does not carry the qualified Shallot candidate");
         }
 
-        const packDir = mkdtempSync("/tmp/shallot-avbd-pack-");
-        const scratchDir = mkdtempSync("/tmp/shallot-avbd-consumer-");
+        const scratchDir = mkdtempSync(join(tmpdir(), "shallot-avbd-consumer-"));
+        const packDir = join(scratchDir, "pack");
         try {
+            mkdirSync(packDir);
             const packed = runChecked(
                 [process.execPath, "pm", "pack", "--destination", packDir],
                 root,
@@ -117,9 +118,9 @@ check(
                         type: "module",
                         packageManager: "bun@1.4.2",
                         dependencies: {
-                            "@dylanebert/shallot-avbd-physics": `file:${artifact}`,
+                            "@dylanebert/shallot-avbd-physics": `file:${relative(scratchDir, artifact)}`,
                             "@dylanebert/shallot": `github:dylanebert/shallot#${CANDIDATE_SHA}`,
-                            typegpu: "~0.12.5",
+                            typegpu: "0.12.5",
                         },
                     },
                     null,
@@ -129,6 +130,8 @@ check(
             runChecked([process.execPath, "install"], scratchDir);
             rmSync(resolve(scratchDir, "node_modules"), { recursive: true, force: true });
             runChecked([process.execPath, "install", "--frozen-lockfile"], scratchDir);
+            const cliDir = join(scratchDir, "cli");
+            mkdirSync(cliDir);
 
             const probe = `
 import { createRequire } from "node:module";
@@ -156,13 +159,12 @@ const tag = await Bun.file(resolve(shallotPath, ".bun-tag")).text();
 if (tag.trim() !== "${CANDIDATE_TAG}") throw new Error("installed Shallot is not the qualified candidate");
 const bin = resolve(import.meta.dir, "node_modules/.bin/shallot");
 if (!existsSync(bin)) throw new Error("installed Shallot bin is missing");
-const result = spawnSync(process.execPath, [bin, "list"], { cwd: import.meta.dir, encoding: "utf8" });
+const result = spawnSync(process.execPath, [bin, "test", "--list"], { cwd: resolve(import.meta.dir, "cli"), encoding: "utf8" });
 if (result.status !== 0) throw new Error("installed Shallot bin failed: " + result.stderr);
 `;
             writeFileSync(resolve(scratchDir, "probe.ts"), probe);
             runChecked([process.execPath, "probe.ts"], scratchDir);
         } finally {
-            rmSync(packDir, { recursive: true, force: true });
             rmSync(scratchDir, { recursive: true, force: true });
         }
     },

@@ -23,20 +23,20 @@
     },
     "files": ["src", "!src/**/*.test.ts"],
     "scripts": {
-        "check": "tsc --noEmit && biome check && shallot check",
-        "list": "shallot list",
-        "workflow": "shallot workflow",
+        "check": "tsc --noEmit && biome check && shallot test --list",
+        "list": "shallot test --list",
         "test": "shallot test"
     },
     "peerDependencies": {
-        "@dylanebert/shallot": "^0.9.5",
+        "@dylanebert/shallot": "^0.10.0",
         "typegpu": "~0.12.5"
     },
     "devDependencies": {
         "@biomejs/biome": "^2.5.13",
-        "@dylanebert/shallot": "github:dylanebert/shallot#0664218f465224397b80aeb604b51178ac71cfb2",
+        "@dylanebert/shallot": "github:dylanebert/shallot#69f12a06438d8ce80aa1ab9e4b34de5b58820e15",
         "@types/bun": "latest",
         "@webgpu/types": "^0.1.72",
+        "bun-webgpu": "github:dylanebert/bun-webgpu#7b75d0440d2f22e2c9a1cb383d15529652c53d98",
         "typegpu": "~0.12.5",
         "typescript": "^7.0.2",
         "unplugin-typegpu": "~0.12.3"

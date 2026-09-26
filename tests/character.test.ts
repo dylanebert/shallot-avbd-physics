@@ -393,7 +393,7 @@ check(
     {
         claim: "character cull preserves bounded behavioral scene results",
         size: "integration",
-        subject: ["tests/character.ts", "tests/hull.ts", "tests/character.test.ts"],
+        subject: ["tests/character.ts", "tests/hull.ts"],
         budget: 20000,
     },
     () => {
@@ -461,7 +461,7 @@ check(
     {
         claim: "seeded character cull preserves randomized sweep results",
         size: "integration",
-        subject: ["tests/character.ts", "tests/hull.ts", "tests/character.test.ts"],
+        subject: ["tests/character.ts", "tests/hull.ts"],
         budget: 20000,
     },
     () => {

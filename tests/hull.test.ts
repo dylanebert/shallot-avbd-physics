@@ -265,7 +265,7 @@ check(
     {
         claim: "hull solver settles two stacked box-hulls",
         size: "integration",
-        subject: ["tests/solver.ts", "tests/hull.ts", "tests/rounded.ts", "tests/hull.test.ts"],
+        subject: ["tests/solver.ts", "tests/hull.ts", "tests/rounded.ts"],
         budget: 20000,
     },
     () => {

@@ -747,7 +747,7 @@ check(
         {
             claim: "reverse-rank coloring preserves sequential results",
             size: "integration",
-            subject: ["tests/solver.ts", "tests/coloring.ts", "tests/oracle.test.ts"],
+            subject: ["tests/solver.ts", "tests/coloring.ts"],
             budget: 20000,
         },
         () => {
@@ -772,7 +772,7 @@ check(
         {
             claim: "valid coloring preserves the sequential settled solution",
             size: "integration",
-            subject: ["tests/solver.ts", "tests/coloring.ts", "tests/oracle.test.ts"],
+            subject: ["tests/solver.ts", "tests/coloring.ts"],
             budget: 20000,
         },
         () => {
@@ -824,12 +824,7 @@ check(
     {
         claim: "warmstart settles a chain with fewer iterations than cold reset",
         size: "integration",
-        subject: [
-            "tests/solver.ts",
-            "tests/manifold.ts",
-            "tests/collide.ts",
-            "tests/oracle.test.ts",
-        ],
+        subject: ["tests/solver.ts", "tests/manifold.ts", "tests/collide.ts"],
         budget: 20000,
     },
     () => {

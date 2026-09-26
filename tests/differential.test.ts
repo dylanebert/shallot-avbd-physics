@@ -11,9 +11,7 @@ import {
 } from "../src/step";
 import { type Body, body } from "./rigid";
 
-// An integration row that requires `gpu`. Its body needs a compatible `navigator.gpu` device, but
-// the pinned carrier does not supply the `gpu` requirement, so the integration sweep refuses nonzero
-// before the body runs rather than passing or skipping.
+// This integration row runs the AVBD differential sentinel on a real WebGPU adapter.
 
 const CAPACITY = 8;
 const DT = Math.fround(1 / 60);
@@ -53,9 +51,12 @@ check(
         claim: "gpu differential execution produces the intended contact and a geometry-bounded pose",
         size: "integration",
         requires: ["gpu"],
-        subject: ["src/step.ts", "src/collide.ts", "tests/differential.test.ts"],
+        subject: ["src/step.ts", "src/collide.ts"],
     },
     async () => {
+        const peerModule = "bun-webgpu";
+        const peer = (await import(peerModule)) as { setupGlobals(): Promise<void> };
+        await peer.setupGlobals();
         const previousCompute = { ...Compute };
         let device: GPUDevice | undefined;
         let physics: PhysicsStep | undefined;

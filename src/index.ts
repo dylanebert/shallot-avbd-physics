@@ -25,8 +25,8 @@ import {
     springSignature,
     springTraits,
 } from "@dylanebert/shallot/physics";
-import { BeginFrameSystem, Render } from "@dylanebert/shallot/render";
-import { PrepassSystem } from "@dylanebert/shallot/sear";
+import { BeginFrameSystem, Render } from "@dylanebert/shallot/rendering";
+import { PrepassSystem } from "@dylanebert/shallot/standard/rendering";
 import { packHulls } from "./hull";
 import { diffStamps } from "./recycle";
 import { B_POS, B_QUAT, B_VELL, type Inputs, PENALTY_MIN, PhysicsStep } from "./step";

@@ -1,19 +1,9 @@
-// Named headless WebGPU build and lifecycle evidence for AVBD, Character, and Player. When a runner
-// supplies a Lavapipe-backed WebGPU environment, these bodies compile the stack, step it, and read
-// solver-owned poses through Shallot's public `probeBuffer` helper. They check finite readback,
-// closed-form falling direction, and the grounded character rest band. They are not solver-parity or
-// conformant-device evidence; Lavapipe is testing-only, and real-device parity needs separate evidence.
+// These GPU integration rows exercise the AVBD solver and Shallot's Character and Player plugins.
+// AVBD poses come from its public solver buffer; Character and Player poses come from PhysicsPlugin.
 //
-// `CAPACITY` is 8192 because the contact store uses about 3584 bytes per entity. Its roughly 28 MiB
-// allocation fits under a 128 MiB storage-binding limit, while the engine default capacity of 65536
-// would require roughly 235 MiB. The public `probeBuffer` helper owns command submission, staging,
-// mapping, usage validation, and alignment. `Avbd.step.bodies` is the solver's SoA buffer, and the
-// imported B_* indices keep probe offsets aligned with the solver layout.
+// `CAPACITY` keeps AVBD's contact store within the adapter's storage-binding limit.
 //
-// These are integration rows that require `gpu`. The current AVBD preloads install the TypeGPU
-// transform and Shallot declaration carrier only; they do not install a software adapter, and the
-// pinned carrier has no GPU provider, so the integration sweep refuses nonzero before the bodies run
-// rather than passing or skipping.
+// Each row initializes bun-webgpu locally, so unit checks do not pay for GPU setup.
 
 import { expect } from "bun:test";
 import {
@@ -24,23 +14,28 @@ import {
     Compute,
     InputPlugin,
     MirrorPlugin,
+    PhysicsPlugin,
     PlayerPlugin,
     probeBuffer,
     RenderPlugin,
+    readBody,
     SlabPlugin,
+    type State,
     TransformsPlugin,
 } from "@dylanebert/shallot";
 import { check } from "@dylanebert/shallot/harness/check";
 import { Avbd, AvbdPlugin } from "../src/index";
 import { B_POS, B_QUAT, B_VELL } from "../src/step";
 
-/** the headless entity capacity — the contact store fits under lavapipe's 128 MiB binding ceiling. */
+/** the headless entity capacity — the AVBD contact store fits under the adapter's storage limit. */
 const CAPACITY = 8192;
-/** fixed ticks to step before probing — five ticks of closed-form fall, no contact yet. */
+/** fixed ticks before probing the headless body pose. */
 const TICKS = 5;
 
-/** the solver-owned pose of one body, read through the existing `probeBuffer` seam. */
-async function probePose(eid: number): Promise<{ pos: number[]; quat: number[]; vel: number[] }> {
+/** the AVBD solver-owned pose of one body, read through Shallot's public `probeBuffer` seam. */
+async function probeAvbdPose(
+    eid: number,
+): Promise<{ pos: number[]; quat: number[]; vel: number[] }> {
     const step = Avbd.step;
     const device = Compute.device;
     if (!step || !device) throw new Error("physics step or device missing after build");
@@ -71,23 +66,40 @@ async function probePose(eid: number): Promise<{ pos: number[]; quat: number[]; 
     };
 }
 
+function probePhysicsPose(state: State, eid: number): NonNullable<ReturnType<typeof readBody>> {
+    const pose = readBody(state, eid);
+    if (!pose) throw new Error("physics body missing after build");
+    return pose;
+}
+
+async function setupGpuPeer(): Promise<void> {
+    const peerModule = "bun-webgpu";
+    const peer = (await import(peerModule)) as { setupGlobals(): Promise<void> };
+    await peer.setupGlobals();
+}
+
 /** every pose lane finite — the S1 bar: the build executed and the readback returned real values. */
-function expectFinite(pose: { pos: number[]; quat: number[]; vel: number[] }): void {
+function expectFinite(pose: {
+    pos: readonly number[];
+    quat: readonly number[];
+    vel: readonly number[];
+}): void {
     for (const lane of [...pose.pos, ...pose.quat, ...pose.vel]) {
         expect(Number.isFinite(lane), `expected a finite pose lane, got ${lane}`).toBe(true);
     }
 }
 
-//  headless lavapipe physics (build + step + probeBuffer readback)
+// AVBD build, step, and public buffer readback
 check(
     "AvbdPlugin builds, steps, and probes finite body poses at capacity 8192",
     {
         claim: "gpu headless avbdplugin builds, steps, and probes finite body poses at capacity 8192",
         size: "integration",
         requires: ["gpu"],
-        subject: ["src/index.ts", "src/step.ts", "src/collide.ts", "tests/headless.test.ts"],
+        subject: ["src/index.ts", "src/step.ts", "src/collide.ts"],
     },
     async () => {
+        await setupGpuPeer();
         const app = await build({
             plugins: [SlabPlugin, MirrorPlugin, AvbdPlugin],
             defaults: false,
@@ -106,7 +118,7 @@ check(
         // pack seeds the box's slot, later ticks integrate it — and 4.9 m above contact is far outside
         // the 0.04 speculative band, so every tick is closed-form free fall.
         for (let i = 0; i < TICKS; i++) app.state.step();
-        const pose = await probePose(box!);
+        const pose = await probeAvbdPose(box!);
         expectFinite(pose);
         // closed-form gravity direction: after solved free-fall ticks the box sits strictly below its
         // authored start — a band derived from free-fall kinematics, never from the observed value.
@@ -133,11 +145,11 @@ check(
         claim: "gpu headless characterplugin sweeps headlessly at the same capacity",
         size: "integration",
         requires: ["gpu"],
-        subject: ["src/index.ts", "src/step.ts", "src/collide.ts", "tests/headless.test.ts"],
     },
     async () => {
+        await setupGpuPeer();
         const app = await build({
-            plugins: [SlabPlugin, MirrorPlugin, AvbdPlugin, CharacterPlugin],
+            plugins: [SlabPlugin, MirrorPlugin, PhysicsPlugin, CharacterPlugin],
             defaults: false,
             capacity: CAPACITY,
             scene: `<scene>
@@ -149,29 +161,13 @@ check(
                 />
             </scene>`,
         });
-        // the kinematic character: the sweep (fixed group, before the solve) reads candidate poses
-        // through the body Mirror and writes its pose via setKinematic — the whole readback-bounded
-        // coupling, headless.
+        // CharacterPlugin requires PhysicsPlugin and sweeps the authored capsule before the solve.
         const chars = [...app.state.query([Character])];
         expect(chars.length).toBe(1);
         for (let i = 0; i < TICKS; i++) app.state.step();
-        const pose = await probePose(chars[0]);
+        const pose = probePhysicsPose(app.state, chars[0]);
         expectFinite(pose);
-        // the sweep applies the world gravity (−10, the plugin's configured GRAVITY) to an un-driven
-        // character, so it too falls from its authored 3 m — derived from the sweep contract, not
-        // tuned. The floor is the same derivation's other side, on the discrete scheme the sweep
-        // actually runs: symplectic Euler (velocity first, then position — the runtime twin of the
-        // oracle's moveCharacter), whose closed form the oracle pins as x_n = x0 + g·h²·n(n+1)/2 per
-        // integrated tick (tests/oracle.test.ts). The seeding precondition is what fixes n,
-        // differently than the box: the sweep's velocity is persistent CPU-side state and integrates
-        // from the first tick, but the first tick's draw-group pack seed overwrites the slot with the
-        // authored pose (the readback shows 3 at tick 1; the sweep's own trajectory has already moved
-        // once), so TICKS = 5 ticks of un-driven fall cover Δy = g·h²·n(n+1)/2 at g = 10, h = 1/60,
-        // n = TICKS = 5 ≈ 0.0417 m (the capsule's bottom at 2.1 sits 1.6 m above the ground top at
-        // 0.5, so no depenetration or contact can have moved it), so the pose must still exceed
-        // 3 − 0.0417 ≈ 2.958 — assert > 2.9, deliberately below the derived bound so the arm cannot
-        // flake on the derivation's own precision (a floor is never tightened to the derived value,
-        // never fit to an observed reading), while a zero readback still reds.
+        // Five fixed ticks of world gravity move the un-driven character below its authored height.
         expect(pose.pos[1]).toBeLessThan(3);
         expect(pose.pos[1]).toBeGreaterThan(2.9);
         app.dispose();
@@ -184,9 +180,9 @@ check(
         claim: "gpu headless playerplugin composes headlessly at the same capacity",
         size: "integration",
         requires: ["gpu"],
-        subject: ["src/index.ts", "src/step.ts", "src/collide.ts", "tests/headless.test.ts"],
     },
     async () => {
+        await setupGpuPeer();
         const app = await build({
             plugins: [
                 SlabPlugin,
@@ -194,7 +190,7 @@ check(
                 RenderPlugin,
                 InputPlugin,
                 MirrorPlugin,
-                AvbdPlugin,
+                PhysicsPlugin,
                 CharacterPlugin,
                 PlayerPlugin,
             ],
@@ -214,12 +210,9 @@ check(
         const chars = [...app.state.query([Character])];
         expect(chars.length).toBe(1);
         for (let i = 0; i < TICKS; i++) app.state.step();
-        const pose = await probePose(chars[0]);
+        const pose = probePhysicsPose(app.state, chars[0]);
         expectFinite(pose);
-        // the player is an un-driven character grounded at its closed-form rest height: authored at
-        // y = 1 the capsule's bottom (0.9 below center) embeds in the ground (top at 0.5), and the
-        // sweep depenetrates to rest at center y = 0.5 + 0.6 + 0.3 = 1.4 — derived from the authored
-        // geometry, never from the observed value; the 0.05 band absorbs the depenetration residual.
+        // The sweep depenetrates the capsule from its authored overlap to the geometry-derived rest height.
         expect(pose.pos[1]).toBeGreaterThan(1.35);
         expect(pose.pos[1]).toBeLessThan(1.45);
         app.dispose();

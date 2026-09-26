@@ -6,15 +6,16 @@
       "name": "@dylanebert/shallot-avbd-physics",
       "devDependencies": {
         "@biomejs/biome": "^2.5.13",
-        "@dylanebert/shallot": "github:dylanebert/shallot#0664218f465224397b80aeb604b51178ac71cfb2",
+        "@dylanebert/shallot": "github:dylanebert/shallot#69f12a06438d8ce80aa1ab9e4b34de5b58820e15",
         "@types/bun": "latest",
         "@webgpu/types": "^0.1.72",
+        "bun-webgpu": "github:dylanebert/bun-webgpu#7b75d0440d2f22e2c9a1cb383d15529652c53d98",
         "typegpu": "~0.12.5",
         "typescript": "^7.0.2",
         "unplugin-typegpu": "~0.12.3",
       },
       "peerDependencies": {
-        "@dylanebert/shallot": "^0.9.5",
+        "@dylanebert/shallot": "^0.10.0",
         "typegpu": "~0.12.5",
       },
     },
@@ -56,7 +57,7 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.5.13", "", { "os": "win32", "cpu": "x64" }, "sha512-VOofU/nW761XWzUeUNE8zzYNyPrxuMuNFMizL0qz7J75yeV8N7WFheUlk1/K6dOkaFpH9wJ+lDKlwjAbw0346w=="],
 
-    "@dylanebert/shallot": ["@dylanebert/shallot@github:dylanebert/shallot#0664218", { "dependencies": { "@babel/parser": "^8.0.4", "@types/node": "^26.2.0", "@webgpu/types": "^0.1.72", "unplugin-typegpu": "~0.12.3", "vite": "^8.3.0" }, "peerDependencies": { "bun-webgpu": ">=0.1.7", "playwright": "^1.0.0", "typegpu": "~0.12.5" }, "optionalPeers": ["bun-webgpu", "playwright"], "bin": { "shallot": "./bin/shallot.ts" } }, "dylanebert-shallot-0664218", "sha512-tnyD1mOSycSqZMpgh04mCx6iC3l8AknEQ+xA2wDFK96ifD0n6Q5O9UxjFCFL8A7gagI21AFnB+m8T2qon7Qp8w=="],
+    "@dylanebert/shallot": ["@dylanebert/shallot@github:dylanebert/shallot#69f12a0", { "dependencies": { "@babel/parser": "^8.0.4", "@types/node": "^26.2.0", "@webgpu/types": "^0.1.72", "unplugin-typegpu": "~0.12.3", "vite": "^8.3.0" }, "peerDependencies": { "bun-webgpu": ">=0.1.7", "playwright": "^1.0.0", "typegpu": "~0.12.5" }, "optionalPeers": ["bun-webgpu", "playwright"], "bin": { "shallot": "./bin/shallot.ts" } }, "dylanebert-shallot-69f12a0", "sha512-d0r0T4OfBxofwoGgtewH+I9/I6TQSAK2PWw5qy8gJ4s96AEhHHp2DH4/MGeMQchq6sJUWuOYzqARyD/KUxF+ag=="],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 
@@ -151,6 +152,16 @@
     "ast-kit": ["ast-kit@2.2.0", "", { "dependencies": { "@babel/parser": "^7.28.5", "pathe": "^2.0.3" } }, "sha512-m1Q/RaVOnTp9JxPX+F+Zn7IcLYMzM8kZofDImfsKZd8MbR+ikdOzTeztStWqfrqIxZnYWryyI9ePm3NGjnZgGw=="],
 
     "bun-types": ["bun-types@1.4.2", "", { "dependencies": { "@types/node": "*" } }, "sha512-bxV1FgK7yBIzjRe5zBozIM4Bem11ZJcCXSrjWRG3YWLt8yFDePu4cLjpebO8OvPeIE9trbyPF4fuj3Cia4Fj3w=="],
+
+    "bun-webgpu": ["bun-webgpu@github:dylanebert/bun-webgpu#7b75d04", { "optionalDependencies": { "bun-webgpu-darwin-arm64": "0.1.7", "bun-webgpu-darwin-x64": "0.1.7", "bun-webgpu-linux-x64": "0.1.7", "bun-webgpu-win32-x64": "0.1.7" }, "peerDependencies": { "typescript": "^5" } }, "dylanebert-bun-webgpu-7b75d04", "sha512-2AsrH52hRUo2Jjk1d1i/qu+EpolfPqb/fPP6BN7wuTWM/m1OHjllFGahDOcGZyR/Y94R+/T2KRy3e99qPbcdAg=="],
+
+    "bun-webgpu-darwin-arm64": ["bun-webgpu-darwin-arm64@0.1.7", "", { "os": "darwin", "cpu": "arm64" }, "sha512-mRrFFyHzPWjsTRidAZBRcu808CPQBOUL0P6b4nxLhp+XHcV/mbUHERZMgW9s58tsojQfSdzschiQa8q+JCgRWA=="],
+
+    "bun-webgpu-darwin-x64": ["bun-webgpu-darwin-x64@0.1.7", "", { "os": "darwin", "cpu": "x64" }, "sha512-g0NXGNgvaVCSH/jCWWlfdiquOHkbUN6vP4zqzSkIxWKQeLnqm3oADcok7SO3yIgI7v5mKpRc/ks7NDEKNH+jNQ=="],
+
+    "bun-webgpu-linux-x64": ["bun-webgpu-linux-x64@0.1.7", "", { "os": "linux", "cpu": "x64" }, "sha512-UEP7UZdEhx9otvkZczjsszL8ZVlrODANQvgl+C88/bNVmxDoFi7w1fWzGi1sZyakiETjmtFDq2/xCLhbSZxjqw=="],
+
+    "bun-webgpu-win32-x64": ["bun-webgpu-win32-x64@0.1.7", "", { "os": "win32", "cpu": "x64" }, "sha512-KZktiFkBz6sN7PEm1NVdeaLP5Q5X/PlSHZqefY4nNuWtf0LNvh54NhZe7yVv/Plz/nGbv92b0KHMBY3ki/pp6g=="],
 
     "debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" }, "peerDependencies": { "supports-color": "*" }, "optionalPeers": ["supports-color"] }, "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA=="],
 

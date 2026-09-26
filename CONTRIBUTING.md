@@ -7,8 +7,7 @@ bun install --frozen-lockfile
 bun run check
 bun run test
 bun run test -- --integration --base <ref> --diff <ref>   # tests whose subject changed
-bun run list
-bun run workflow
+bun run test -- --list
 ```
 
 - `src/` is the plugin, the GPU step, the narrowphase and hull packing; `src/core.ts` is the public `/core` export. Shallot is imported only through its public package exports.
