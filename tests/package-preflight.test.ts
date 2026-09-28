@@ -3,9 +3,6 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 
-const SHALLOT_SHA = "49fbfcbe4b8d00673b2798c96ae25bbefa5f6060";
-const SHALLOT_TAG = `dylanebert-shallot-${SHALLOT_SHA.slice(0, 7)}`;
-
 interface CommandResult {
     code: number;
     stdout: string;
@@ -45,15 +42,10 @@ test("packed AVBD identity and public boundary work in a scratch consumer", () =
     const lock = readFileSync(resolve(root, "bun.lock"), "utf8");
     const devDependencies = manifest.devDependencies as Record<string, unknown>;
     const shallotDependency = devDependencies["@dylanebert/shallot"];
-    const candidateTarball =
-        typeof shallotDependency === "string" && shallotDependency.endsWith(".tgz");
-    if (!candidateTarball && shallotDependency !== `github:dylanebert/shallot#${SHALLOT_SHA}`) {
-        throw new Error("package.json does not carry the qualified full-SHA Shallot pin");
+    if (shallotDependency !== "^0.10.0-next.1") {
+        throw new Error("package.json does not carry the published Shallot prerelease pin");
     }
-    const expectedLockEntry = candidateTarball
-        ? `@dylanebert/shallot@${shallotDependency}`
-        : `@dylanebert/shallot@github:dylanebert/shallot#${SHALLOT_SHA.slice(0, 7)}`;
-    if (!lock.includes(expectedLockEntry)) {
+    if (!lock.includes('"@dylanebert/shallot": "^0.10.0-next.1"')) {
         throw new Error("bun.lock does not resolve the declared Shallot dependency");
     }
 
@@ -97,8 +89,8 @@ test("packed AVBD identity and public boundary work in a scratch consumer", () =
                     packageManager: "bun@1.4.2",
                     dependencies: {
                         "@dylanebert/shallot-avbd-physics": `file:${relative(scratchDir, artifact)}`,
-                        "@dylanebert/shallot": `github:dylanebert/shallot#${SHALLOT_SHA}`,
-                        typegpu: "0.12.5",
+                        "@dylanebert/shallot": "^0.10.0-next.1",
+                        typegpu: "~0.12.6",
                     },
                 },
                 null,
@@ -122,7 +114,7 @@ if (typeof AvbdPlugin !== "object" || typeof CoreAvbd !== "object" || MAX_CONTAC
   throw new Error("public AVBD exports are not usable");
 if (avbd.name !== "@dylanebert/shallot-avbd-physics")
   throw new Error("installed AVBD package has the wrong identity");
-if (shallot.version !== "0.10.0") throw new Error("installed Shallot has the wrong version");
+if (shallot.version !== "0.10.0-next.1") throw new Error("installed Shallot has the wrong version");
 if (Object.keys(shallot.exports).some((name) => name.includes("harness")))
   throw new Error("installed Shallot exposes retired harness support");
 const shallotPath = realpathSync(resolve(import.meta.dir, "node_modules/@dylanebert/shallot"));
@@ -130,9 +122,7 @@ const typegpuPath = realpathSync(resolve(import.meta.dir, "node_modules/typegpu"
 const resolvedTypegpu = realpathSync(createRequire(resolve(shallotPath, "package.json")).resolve("typegpu/package.json"));
 if (resolvedTypegpu !== resolve(typegpuPath, "package.json"))
   throw new Error("Shallot resolved a second TypeGPU instance");
-if (typegpu.version !== "0.12.5") throw new Error("installed TypeGPU has the wrong version");
-const tag = await Bun.file(resolve(shallotPath, ".bun-tag")).text();
-if (tag.trim() !== "${SHALLOT_TAG}") throw new Error("installed Shallot is not the qualified pin");
+if (typegpu.version !== "0.12.6") throw new Error("installed TypeGPU has the wrong version");
 `;
         writeFileSync(resolve(scratchDir, "probe.ts"), probe);
         runChecked([process.execPath, "probe.ts"], scratchDir);
