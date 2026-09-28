@@ -445,18 +445,22 @@ test("character re-gather includes bodies reached by platform carry", () => {
 test("character gather reports and preserves its bounded overflow policy", () => {
     const mk = () => ({
         ch: character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 1.3, 0])),
-        // A narrow row along the path. With the sweep band's ~1.6 m horizontal reach, the cap
-        // window loses three bodies at the left and gains three at the right on tick 2.
+        // A narrow row across the capsule's upper hemisphere. With the sweep band's ~1.6 m
+        // horizontal reach, the cap window loses three bodies at the left and gains three at the
+        // right on tick 2; the row is close enough to push the character down as it passes beneath.
         statics: Array.from({ length: 90 }, (_, i) =>
-            body([0.05, 0.05, 0.05], 0, 0.8, [-1.625 + i / 24, 2.2, 0]),
+            body([0.05, 0.05, 0.05], 0, 0.8, [-1.64 + i / 24, 2.05, 0]),
         ),
     });
     const d = diag();
     const a = mk();
     const b = mk();
+    const control = character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 1.3, 0]));
     let previous = new Set<Body>();
     let changed = false;
     let div = 0;
+    let noStaticsPosDiv = 0;
+    let noStaticsVelDiv = 0;
     let secondTickDelta = { dropped: 0, added: 0 };
 
     for (let tick = 0; tick < 4; tick++) {
@@ -477,16 +481,30 @@ test("character gather reports and preserves its bounded overflow policy", () =>
         // Replay this tick's first 64 eligible bodies without culling, in scan order.
         const reference = indices.map((index) => b.statics[index]);
         moveCharacter(b.ch, [7.5, 0, 0], reference, G, DT, false, [], { cull: false });
-        div = Math.max(div, length(sub(a.ch.body.posLin, b.ch.body.posLin)));
+        moveCharacter(control, [7.5, 0, 0], [], G, DT);
+        div = Math.max(
+            div,
+            length(sub(a.ch.body.posLin, b.ch.body.posLin)),
+            length(sub(a.ch.body.velLin, b.ch.body.velLin)),
+        );
+        noStaticsPosDiv = Math.max(
+            noStaticsPosDiv,
+            length(sub(a.ch.body.posLin, control.body.posLin)),
+        );
+        noStaticsVelDiv = Math.max(
+            noStaticsVelDiv,
+            length(sub(a.ch.body.velLin, control.body.velLin)),
+        );
         previous = current;
     }
 
     console.log(
-        `[character/cull] overflow — tick-2 set change ${secondTickDelta.dropped} dropped/${secondTickDelta.added} added, later changes ${changed}, max divergence ${div.toExponential(1)}`,
+        `[character/cull] overflow — tick-2 set change ${secondTickDelta.dropped} dropped/${secondTickDelta.added} added, later changes ${changed}, max divergence ${div.toExponential(1)}, no-statics pos/vel divergence ${noStaticsPosDiv.toExponential(1)}/${noStaticsVelDiv.toExponential(1)}`,
     );
     expect(secondTickDelta).toEqual({ dropped: 3, added: 3 });
     expect(changed).toBe(true);
     expect(div).toBe(0); // the cap policy IS "first 64 in scan order" — pinned so the GPU can mirror it
+    expect(noStaticsPosDiv).toBeGreaterThan(0.01); // retained contacts change the pose; no-statics is a red control
 }, 250);
 
 test("character displacement guard refuses deep geometry escape", () => {
