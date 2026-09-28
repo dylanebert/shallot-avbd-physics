@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 
-const SHALLOT_SHA = "e5870e50b276777046224ffc513cc229c3610ea8";
+const SHALLOT_SHA = "49fbfcbe4b8d00673b2798c96ae25bbefa5f6060";
 const SHALLOT_TAG = `dylanebert-shallot-${SHALLOT_SHA.slice(0, 7)}`;
 
 interface CommandResult {
