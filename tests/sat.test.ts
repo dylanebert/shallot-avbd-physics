@@ -1,5 +1,5 @@
-import { expect } from "bun:test";
-import { check } from "@dylanebert/shallot/harness/check";
+import { expect, test } from "bun:test";
+
 import * as d from "typegpu/data";
 // the shipped narrowphase, called on the CPU — the same TGSL source the GPU collide pass splices
 import { collideBoxBox, MAX_CONTACTS } from "../src/collide";
@@ -55,34 +55,29 @@ const near = (got: number, want: number): void => {
     expect(Math.abs(got - want)).toBeLessThan(TOL);
 };
 
-check(
-    "box-box SAT vs C++ gold vectors",
-    { claim: "box-box SAT preserves every bounded C++ gold manifold" },
-    () => {
-        for (const cfg of gold.configs as GoldConfig[]) {
-            const { contacts, basis } = collide(box(cfg.a), box(cfg.b), dRel(cfg));
+test("box-box SAT preserves every bounded C++ gold manifold", () => {
+    for (const cfg of gold.configs as GoldConfig[]) {
+        const { contacts, basis } = collide(box(cfg.a), box(cfg.b), dRel(cfg));
 
-            // count is exact — a different count means a different separating axis / clip
-            expect(contacts.length).toBe(cfg.numContacts);
-            if (cfg.numContacts === 0) return;
+        // count is exact — a different count means a different separating axis / clip
+        expect(contacts.length).toBe(cfg.numContacts);
+        if (cfg.numContacts === 0) return;
 
-            // basis: row-major 9 floats
-            const gb = cfg.basis as number[];
-            for (let r = 0; r < 3; r++)
-                for (let c = 0; c < 3; c++) near(basis[r][c], gb[r * 3 + c]);
+        // basis: row-major 9 floats
+        const gb = cfg.basis as number[];
+        for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) near(basis[r][c], gb[r * 3 + c]);
 
-            // match each oracle contact to its gold twin by feature key (order-independent),
-            // then compare the local arms. Feature keys must be bit-identical.
-            for (const want of cfg.contacts) {
-                const got = contacts.find((ct) => ct.feature === want.feature);
-                expect(got, `missing feature 0x${(want.feature >>> 0).toString(16)}`).toBeDefined();
-                if (!got) continue;
-                for (let i = 0; i < 3; i++) near(got.rA[i], want.rA[i]);
-                for (let i = 0; i < 3; i++) near(got.rB[i], want.rB[i]);
-            }
+        // match each oracle contact to its gold twin by feature key (order-independent),
+        // then compare the local arms. Feature keys must be bit-identical.
+        for (const want of cfg.contacts) {
+            const got = contacts.find((ct) => ct.feature === want.feature);
+            expect(got, `missing feature 0x${(want.feature >>> 0).toString(16)}`).toBeDefined();
+            if (!got) continue;
+            for (let i = 0; i < 3; i++) near(got.rA[i], want.rA[i]);
+            for (let i = 0; i < 3; i++) near(got.rB[i], want.rB[i]);
         }
-    },
-);
+    }
+}, 250);
 
 // Feature-key continuity. The key's low byte
 // is the clip-vertex loop index, so a reordered Sutherland-Hodgman output silently reassigns keys —
@@ -101,85 +96,70 @@ check(
 // `collide` returns the SAT min-separation alongside the manifold — the signed overlap depth the gym
 // `no-overlap` gate reads to flag severely interpenetrating settled bodies (penetration = −separation).
 // Pin the sign + magnitude convention the gate depends on; a flipped sign would read overlap as clearance.
-check(
-    "axis-aligned overlap → separation is the negative penetration depth",
-    { claim: "SAT separation reports negative axis-aligned penetration" },
-    () => {
-        // unit boxes, centers 0.8 apart on x: spans [-0.5,0.5] and [0.3,1.3] overlap 0.2 → the SAT
-        // min-separation = centerΔ − (halfA + halfB) = 0.8 − 1.0 = −0.2 (penetrating by 0.2).
-        const a: Box = { size: [1, 1, 1], pos: [0, 0, 0], quat: [0, 0, 0, 1] };
-        const b: Box = { size: [1, 1, 1], pos: [0.8, 0, 0], quat: [0, 0, 0, 1] };
-        expect(collide(a, b).separation).toBeCloseTo(-0.2, 5);
-    },
-);
+test("SAT separation reports negative axis-aligned penetration", () => {
+    // unit boxes, centers 0.8 apart on x: spans [-0.5,0.5] and [0.3,1.3] overlap 0.2 → the SAT
+    // min-separation = centerΔ − (halfA + halfB) = 0.8 − 1.0 = −0.2 (penetrating by 0.2).
+    const a: Box = { size: [1, 1, 1], pos: [0, 0, 0], quat: [0, 0, 0, 1] };
+    const b: Box = { size: [1, 1, 1], pos: [0.8, 0, 0], quat: [0, 0, 0, 1] };
+    expect(collide(a, b).separation).toBeCloseTo(-0.2, 5);
+}, 250);
 
-check(
-    "a non-penetrating near pair → positive separation (the gate reads no penetration)",
-    { claim: "SAT separation reports positive clearance for a near pair" },
-    () => {
-        // centers 1.3 apart → a 0.3 gap (≫ the speculative band), so collide reports a positive
-        // separation; the gate's `−separation` is then ≤ 0 → contributes no penetration.
-        const a: Box = { size: [1, 1, 1], pos: [0, 0, 0], quat: [0, 0, 0, 1] };
-        const b: Box = { size: [1, 1, 1], pos: [1.3, 0, 0], quat: [0, 0, 0, 1] };
-        expect(collide(a, b).separation).toBeGreaterThan(0);
-    },
-);
+test("SAT separation reports positive clearance for a near pair", () => {
+    // centers 1.3 apart → a 0.3 gap (≫ the speculative band), so collide reports a positive
+    // separation; the gate's `−separation` is then ≤ 0 → contributes no penetration.
+    const a: Box = { size: [1, 1, 1], pos: [0, 0, 0], quat: [0, 0, 0, 1] };
+    const b: Box = { size: [1, 1, 1], pos: [1.3, 0, 0], quat: [0, 0, 0, 1] };
+    expect(collide(a, b).separation).toBeGreaterThan(0);
+}, 250);
 
-check(
-    "box-box SAT feature-key continuity under sub-box perturbation",
-    { claim: "SAT preserves feature keys under bounded interior perturbations" },
-    () => {
-        const baseA: Box = { size: [10, 1, 10], pos: [0, 0, 0], quat: [0, 0, 0, 1] }; // ground
-        const baseB: Box = { size: [1, 1, 1], pos: [0, 0.97, 0], quat: [0, 0, 0, 1] }; // box, interior, penetrating
+test("SAT preserves feature keys under bounded interior perturbations", () => {
+    const baseA: Box = { size: [10, 1, 10], pos: [0, 0, 0], quat: [0, 0, 0, 1] }; // ground
+    const baseB: Box = { size: [1, 1, 1], pos: [0, 0.97, 0], quat: [0, 0, 0, 1] }; // box, interior, penetrating
 
-        // world contact location = midpoint of the two local arms transformed to world
-        const worldMid = (box: Box, other: Box, c: Contact): Vec3 =>
-            scale(
-                add(transform(box.pos, box.quat, c.rA), transform(other.pos, other.quat, c.rB)),
-                0.5,
-            );
+    // world contact location = midpoint of the two local arms transformed to world
+    const worldMid = (box: Box, other: Box, c: Contact): Vec3 =>
+        scale(add(transform(box.pos, box.quat, c.rA), transform(other.pos, other.quat, c.rB)), 0.5);
 
-        const yaw = (deg: number): Quat => {
-            const h = (deg * Math.PI) / 360;
-            return [0, Math.sin(h), 0, Math.cos(h)];
-        };
+    const yaw = (deg: number): Quat => {
+        const h = (deg * Math.PI) / 360;
+        return [0, Math.sin(h), 0, Math.cos(h)];
+    };
 
-        // ε perturbations of B that keep the same face-face contact (corner movement << inter-contact spacing 1.0)
-        const cases: { name: string; b: Box }[] = [
-            { name: "translate +x", b: { ...baseB, pos: [0.02, 0.97, 0] } },
-            { name: "translate -z", b: { ...baseB, pos: [0, 0.97, -0.02] } },
-            { name: "sink deeper", b: { ...baseB, pos: [0, 0.95, 0] } },
-            { name: "tiny yaw", b: { ...baseB, quat: yaw(0.5) } },
-        ];
+    // ε perturbations of B that keep the same face-face contact (corner movement << inter-contact spacing 1.0)
+    const cases: { name: string; b: Box }[] = [
+        { name: "translate +x", b: { ...baseB, pos: [0.02, 0.97, 0] } },
+        { name: "translate -z", b: { ...baseB, pos: [0, 0.97, -0.02] } },
+        { name: "sink deeper", b: { ...baseB, pos: [0, 0.95, 0] } },
+        { name: "tiny yaw", b: { ...baseB, quat: yaw(0.5) } },
+    ];
 
-        const base = collide(baseA, baseB);
+    const base = collide(baseA, baseB);
 
-        expect(base.contacts.length).toBe(4);
+    expect(base.contacts.length).toBe(4);
 
-        for (const cs of cases) {
-            const perturbed = collide(baseA, cs.b);
-            // every base contact still present (matched by world midpoint within << spacing) keeps its key
-            for (const b0 of base.contacts) {
-                const m0 = worldMid(baseA, baseB, b0);
-                let best: Contact | null = null;
-                let bestD = 0.1; // >> ε movement (~0.02), << inter-contact spacing (~1.0)
-                for (const p of perturbed.contacts) {
-                    const mp = worldMid(baseA, cs.b, p);
-                    const d = Math.hypot(m0[0] - mp[0], m0[1] - mp[1], m0[2] - mp[2]);
-                    if (d < bestD) {
-                        bestD = d;
-                        best = p;
-                    }
+    for (const cs of cases) {
+        const perturbed = collide(baseA, cs.b);
+        // every base contact still present (matched by world midpoint within << spacing) keeps its key
+        for (const b0 of base.contacts) {
+            const m0 = worldMid(baseA, baseB, b0);
+            let best: Contact | null = null;
+            let bestD = 0.1; // >> ε movement (~0.02), << inter-contact spacing (~1.0)
+            for (const p of perturbed.contacts) {
+                const mp = worldMid(baseA, cs.b, p);
+                const d = Math.hypot(m0[0] - mp[0], m0[1] - mp[1], m0[2] - mp[2]);
+                if (d < bestD) {
+                    bestD = d;
+                    best = p;
                 }
-                expect(best, `contact at ${m0.map((x) => x.toFixed(2))} survived`).not.toBeNull();
-                expect(
-                    best?.feature,
-                    `feature key 0x${(b0.feature >>> 0).toString(16)} preserved`,
-                ).toBe(b0.feature);
             }
+            expect(best, `contact at ${m0.map((x) => x.toFixed(2))} survived`).not.toBeNull();
+            expect(
+                best?.feature,
+                `feature key 0x${(b0.feature >>> 0).toString(16)} preserved`,
+            ).toBe(b0.feature);
         }
-    },
-);
+    }
+}, 250);
 
 // Pins the CURRENT warmstart-key choice against accidental drift — not a proven-best decision. We key
 // on the stable clip-loop ordinal (a body-fixed corner id), matched by (a,b)+key; webphysics re-ordinals
@@ -190,46 +170,42 @@ check(
 // interior manifold (no reduction); this reaches the OVER-PRODUCED clip the Jolt reduction prunes to 4,
 // where each kept contact keeps its ORIGINAL clip ordinal (a non-contiguous subset), so a rank-relabel
 // (which would emit exactly [0,1,2,3], the indices of the 4-element output array) goes red.
-check(
-    "reduction over-produces, then the kept keys are body-fixed clip ordinals (≠ array rank)",
-    { claim: "SAT reduction preserves original clip ordinals" },
-    () => {
-        // two EQUAL unit boxes, B yawed about the contact normal (Y) and resting on A: the yawed incident
-        // square pokes past A's axis-aligned reference square on all four sides, so the Sutherland-Hodgman
-        // clip produces an octagon (> 4 candidates) and the reduction runs. (A larger ground would contain
-        // the incident face → 4 candidates, no reduction — that is the interior case above.)
-        const a: Box = { size: [1, 1, 1], pos: [0, 0, 0], quat: [0, 0, 0, 1] };
-        const yawB = (deg: number, sink: number): Box => {
-            const h = (deg * Math.PI) / 360;
-            return {
-                size: [1, 1, 1],
-                pos: [0, 1 - sink, 0],
-                quat: [0, Math.sin(h), 0, Math.cos(h)],
-            };
+test("SAT reduction preserves original clip ordinals", () => {
+    // two EQUAL unit boxes, B yawed about the contact normal (Y) and resting on A: the yawed incident
+    // square pokes past A's axis-aligned reference square on all four sides, so the Sutherland-Hodgman
+    // clip produces an octagon (> 4 candidates) and the reduction runs. (A larger ground would contain
+    // the incident face → 4 candidates, no reduction — that is the interior case above.)
+    const a: Box = { size: [1, 1, 1], pos: [0, 0, 0], quat: [0, 0, 0, 1] };
+    const yawB = (deg: number, sink: number): Box => {
+        const h = (deg * Math.PI) / 360;
+        return {
+            size: [1, 1, 1],
+            pos: [0, 1 - sink, 0],
+            quat: [0, Math.sin(h), 0, Math.cos(h)],
         };
+    };
 
-        const { contacts } = collide(a, yawB(35, 0.03));
-        // the octagon reduced to the 4-point cap
-        expect(contacts.length).toBe(4);
+    const { contacts } = collide(a, yawB(35, 0.03));
+    // the octagon reduced to the 4-point cap
+    expect(contacts.length).toBe(4);
 
-        const ordinals = contacts.map((c) => c.feature & 0xff);
-        console.log(`[sat] reduced-manifold clip ordinals: [${ordinals.join(", ")}]`);
+    const ordinals = contacts.map((c) => c.feature & 0xff);
+    console.log(`[sat] reduced-manifold clip ordinals: [${ordinals.join(", ")}]`);
 
-        // over-production happened: the reduction kept at least one clip index ≥ 4, impossible for a
-        // bare 4-candidate manifold — so > 4 candidates existed and were pruned.
-        expect(Math.max(...ordinals)).toBeGreaterThanOrEqual(4);
-        // and the kept ordinals are NOT the contiguous array rank a re-ordinal would assign.
-        expect(ordinals).not.toEqual([0, 1, 2, 3]);
-        // every key is a real clip-loop index into the 8-vertex candidate set.
-        for (const o of ordinals) expect(o).toBeLessThan(8);
+    // over-production happened: the reduction kept at least one clip index ≥ 4, impossible for a
+    // bare 4-candidate manifold — so > 4 candidates existed and were pruned.
+    expect(Math.max(...ordinals)).toBeGreaterThanOrEqual(4);
+    // and the kept ordinals are NOT the contiguous array rank a re-ordinal would assign.
+    expect(ordinals).not.toEqual([0, 1, 2, 3]);
+    // every key is a real clip-loop index into the 8-vertex candidate set.
+    for (const o of ordinals) expect(o).toBeLessThan(8);
 
-        // the face prefix (high bytes: reference side | refAxis | incAxis) is shared by the manifold —
-        // it is the per-contact ordinal in the low byte that distinguishes the points, so two kept
-        // contacts never collide on a key.
-        const keys = contacts.map((c) => c.feature >>> 0);
-        expect(new Set(keys).size).toBe(keys.length);
-    },
-);
+    // the face prefix (high bytes: reference side | refAxis | incAxis) is shared by the manifold —
+    // it is the per-contact ordinal in the low byte that distinguishes the points, so two kept
+    // contacts never collide on a key.
+    const keys = contacts.map((c) => c.feature >>> 0);
+    expect(new Set(keys).size).toBe(keys.length);
+}, 250);
 
 // The SHIPPED narrowphase against the same gold, on the CPU. `collideBoxBox` (src/
 // collide.ts) is a TGSL function: the WGSL the GPU collide pass splices and a plain JS function are the
@@ -242,90 +218,80 @@ check(
 // That f64 CPU arm is also the coverage BOUNDARY: running on JS numbers it cannot see f32 reassociation at
 // all — a reordered sum passes here and diverges on the device. The guard against op-order drift is the
 // emitted-WGSL differential (reviewed per port) plus the gym gates, never this tier.
-check(
-    "the shipped TGSL SAT vs C++ gold vectors",
-    { claim: "shipped TGSL SAT preserves every bounded C++ gold manifold" },
-    () => {
-        for (const cfg of gold.configs as GoldConfig[]) {
-            const dr = dRel(cfg);
-            const r = collideBoxBox(
-                d.vec3f(...(cfg.a.pos as [number, number, number])),
-                d.vec4f(...(cfg.a.quat as [number, number, number, number])),
-                d.vec3f(...(cfg.a.size as [number, number, number])),
-                d.vec3f(...(cfg.b.pos as [number, number, number])),
-                d.vec4f(...(cfg.b.quat as [number, number, number, number])),
-                d.vec3f(...(cfg.b.size as [number, number, number])),
-                d.vec3f(dr[0], dr[1], dr[2]),
-            );
+test("shipped TGSL SAT preserves every bounded C++ gold manifold", () => {
+    for (const cfg of gold.configs as GoldConfig[]) {
+        const dr = dRel(cfg);
+        const r = collideBoxBox(
+            d.vec3f(...(cfg.a.pos as [number, number, number])),
+            d.vec4f(...(cfg.a.quat as [number, number, number, number])),
+            d.vec3f(...(cfg.a.size as [number, number, number])),
+            d.vec3f(...(cfg.b.pos as [number, number, number])),
+            d.vec4f(...(cfg.b.quat as [number, number, number, number])),
+            d.vec3f(...(cfg.b.size as [number, number, number])),
+            d.vec3f(dr[0], dr[1], dr[2]),
+        );
 
-            expect(r.count).toBe(cfg.numContacts);
-            if (cfg.numContacts === 0) return;
+        expect(r.count).toBe(cfg.numContacts);
+        if (cfg.numContacts === 0) return;
 
-            const gb = cfg.basis as number[];
-            const rows = [r.basis.r0, r.basis.r1, r.basis.r2];
-            for (let row = 0; row < 3; row++) {
-                near(rows[row].x, gb[row * 3]);
-                near(rows[row].y, gb[row * 3 + 1]);
-                near(rows[row].z, gb[row * 3 + 2]);
-            }
-
-            // feature keys bit-identical, matched order-independently like the oracle block above
-            for (const want of cfg.contacts) {
-                const k = [...r.feat].slice(0, r.count).indexOf(want.feature >>> 0);
-                expect(k, `missing feature 0x${(want.feature >>> 0).toString(16)}`).toBeGreaterThan(
-                    -1,
-                );
-                if (k < 0) continue;
-                near(r.rA[k].x, want.rA[0]);
-                near(r.rA[k].y, want.rA[1]);
-                near(r.rA[k].z, want.rA[2]);
-                near(r.rB[k].x, want.rB[0]);
-                near(r.rB[k].y, want.rB[1]);
-                near(r.rB[k].z, want.rB[2]);
-            }
+        const gb = cfg.basis as number[];
+        const rows = [r.basis.r0, r.basis.r1, r.basis.r2];
+        for (let row = 0; row < 3; row++) {
+            near(rows[row].x, gb[row * 3]);
+            near(rows[row].y, gb[row * 3 + 1]);
+            near(rows[row].z, gb[row * 3 + 2]);
         }
-    },
-);
+
+        // feature keys bit-identical, matched order-independently like the oracle block above
+        for (const want of cfg.contacts) {
+            const k = [...r.feat].slice(0, r.count).indexOf(want.feature >>> 0);
+            expect(k, `missing feature 0x${(want.feature >>> 0).toString(16)}`).toBeGreaterThan(-1);
+            if (k < 0) continue;
+            near(r.rA[k].x, want.rA[0]);
+            near(r.rA[k].y, want.rA[1]);
+            near(r.rA[k].z, want.rA[2]);
+            near(r.rB[k].x, want.rB[0]);
+            near(r.rB[k].y, want.rB[1]);
+            near(r.rB[k].z, want.rB[2]);
+        }
+    }
+}, 250);
 
 // The gold configs all clip to ≤ 4 candidates, so the block above never reaches the Jolt reduction. This
 // does: two equal unit boxes with B yawed about the contact normal clip to an octagon (the config the
 // "keeps clip ordinals" test above uses), so `pruneContacts` runs and its spread selection — which point
 // is p1, which is its farthest partner, which side of that line p3/p4 fall on — has to match the f64
 // oracle exactly, key for key. A wrong selection silently changes which 4 of the 8 contacts survive.
-check(
-    "the same 4 of 8 candidates, same keys, same arms",
-    { claim: "shipped TGSL SAT reduction matches the f64 oracle" },
-    () => {
-        const h = (35 * Math.PI) / 360;
-        const a: Box = { size: [1, 1, 1], pos: [0, 0, 0], quat: [0, 0, 0, 1] };
-        const b: Box = {
-            size: [1, 1, 1],
-            pos: [0, 1 - 0.03, 0],
-            quat: [0, Math.sin(h), 0, Math.cos(h)],
-        };
-        const want = collide(a, b).contacts;
-        expect(want.length).toBe(MAX_CONTACTS); // the reduction ran
+test("shipped TGSL SAT reduction matches the f64 oracle", () => {
+    const h = (35 * Math.PI) / 360;
+    const a: Box = { size: [1, 1, 1], pos: [0, 0, 0], quat: [0, 0, 0, 1] };
+    const b: Box = {
+        size: [1, 1, 1],
+        pos: [0, 1 - 0.03, 0],
+        quat: [0, Math.sin(h), 0, Math.cos(h)],
+    };
+    const want = collide(a, b).contacts;
+    expect(want.length).toBe(MAX_CONTACTS); // the reduction ran
 
-        const got = collideBoxBox(
-            d.vec3f(...(a.pos as [number, number, number])),
-            d.vec4f(...(a.quat as [number, number, number, number])),
-            d.vec3f(...(a.size as [number, number, number])),
-            d.vec3f(...(b.pos as [number, number, number])),
-            d.vec4f(...(b.quat as [number, number, number, number])),
-            d.vec3f(...(b.size as [number, number, number])),
-            d.vec3f(),
-        );
-        expect(got.count).toBe(want.length);
-        // the kept set is order-sensitive here: the reduce writes p1, p3, p2, p4 in that order, so the
-        // sequence itself is the claim (a differently-selected quad would reorder or replace a key)
-        expect([...got.feat].slice(0, got.count)).toEqual(want.map((c) => c.feature >>> 0));
-        for (let k = 0; k < got.count; k++) {
-            near(got.rA[k].x, want[k].rA[0]);
-            near(got.rA[k].y, want[k].rA[1]);
-            near(got.rA[k].z, want[k].rA[2]);
-            near(got.rB[k].x, want[k].rB[0]);
-            near(got.rB[k].y, want[k].rB[1]);
-            near(got.rB[k].z, want[k].rB[2]);
-        }
-    },
-);
+    const got = collideBoxBox(
+        d.vec3f(...(a.pos as [number, number, number])),
+        d.vec4f(...(a.quat as [number, number, number, number])),
+        d.vec3f(...(a.size as [number, number, number])),
+        d.vec3f(...(b.pos as [number, number, number])),
+        d.vec4f(...(b.quat as [number, number, number, number])),
+        d.vec3f(...(b.size as [number, number, number])),
+        d.vec3f(),
+    );
+    expect(got.count).toBe(want.length);
+    // the kept set is order-sensitive here: the reduce writes p1, p3, p2, p4 in that order, so the
+    // sequence itself is the claim (a differently-selected quad would reorder or replace a key)
+    expect([...got.feat].slice(0, got.count)).toEqual(want.map((c) => c.feature >>> 0));
+    for (let k = 0; k < got.count; k++) {
+        near(got.rA[k].x, want[k].rA[0]);
+        near(got.rA[k].y, want[k].rA[1]);
+        near(got.rA[k].z, want[k].rA[2]);
+        near(got.rB[k].x, want[k].rB[0]);
+        near(got.rB[k].y, want[k].rB[1]);
+        near(got.rB[k].z, want[k].rB[2]);
+    }
+}, 250);

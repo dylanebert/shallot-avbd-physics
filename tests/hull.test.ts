@@ -1,5 +1,5 @@
-import { expect } from "bun:test";
-import { check } from "@dylanebert/shallot/harness/check";
+import { expect, test } from "bun:test";
+
 import { type Box, collide } from "./collide";
 import { boxHull, collideHull, coneHull, type Hull, tetHull } from "./hull";
 import hullGold from "./hull-gold-vectors.json";
@@ -50,67 +50,62 @@ const dRelOf = (a: GoldBody, b: GoldBody): Vec3 => scale(sub(a.vel as Vec3, b.ve
 // a contact's two world surface anchors (a box has radius 0, so the arm is the bare surface point)
 const worldXA = (pos: Vec3, quat: Quat, rA: Vec3): Vec3 => add(rotate(quat, rA), pos);
 
-check(
-    "hull SAT — box-as-hull reproduces box-box collide",
-    { claim: "box-as-hull SAT preserves every bounded box-box manifold" },
-    () => {
-        for (const cfg of boxGold.configs as BoxGoldConfig[]) {
-            const a = box(cfg.a);
-            const b = box(cfg.b);
-            const dRel = dRelOf(cfg.a, cfg.b);
-            const ref = collide(a, b, dRel);
-            const got = collideHull(
-                boxHull(a.size),
-                a.pos,
-                a.quat,
-                boxHull(b.size),
-                b.pos,
-                b.quat,
-                dRel,
-            );
+test("box-as-hull SAT preserves every bounded box-box manifold", () => {
+    for (const cfg of boxGold.configs as BoxGoldConfig[]) {
+        const a = box(cfg.a);
+        const b = box(cfg.b);
+        const dRel = dRelOf(cfg.a, cfg.b);
+        const ref = collide(a, b, dRel);
+        const got = collideHull(
+            boxHull(a.size),
+            a.pos,
+            a.quat,
+            boxHull(b.size),
+            b.pos,
+            b.quat,
+            dRel,
+        );
 
-            // separation status agrees
-            expect(got.contacts.length > 0).toBe(ref.contacts.length > 0);
-            if (ref.contacts.length === 0) return;
+        // separation status agrees
+        expect(got.contacts.length > 0).toBe(ref.contacts.length > 0);
+        if (ref.contacts.length === 0) return;
 
-            // the contact normal (basis row 0, B→A) agrees exactly
-            for (let i = 0; i < 3; i++) expect(got.basis[0][i]).toBeCloseTo(ref.basis[0][i], 7);
+        // the contact normal (basis row 0, B→A) agrees exactly
+        for (let i = 0; i < 3; i++) expect(got.basis[0][i]).toBeCloseTo(ref.basis[0][i], 7);
 
-            // the face manifolds (4-point) must match point-for-point; the edge path (box-box uses a
-            // closest-segment single point, the hull path face-clips) agrees on the normal only.
-            if (cfg.numContacts !== 4) return;
-            expect(got.contacts.length).toBe(4);
+        // the face manifolds (4-point) must match point-for-point; the edge path (box-box uses a
+        // closest-segment single point, the hull path face-clips) agrees on the normal only.
+        if (cfg.numContacts !== 4) return;
+        expect(got.contacts.length).toBe(4);
 
-            // match each reference contact to its hull twin by nearest world anchor, then compare both
-            // anchors + the signed gap (order-independent — the reduce may emit a different rotation).
-            const refPts = ref.contacts.map((c) => ({
-                xA: worldXA(a.pos, a.quat, c.rA),
-                xB: worldXA(b.pos, b.quat, c.rB),
-            }));
-            const gotPts = got.contacts.map((c) => ({
-                xA: worldXA(a.pos, a.quat, c.rA),
-                xB: worldXA(b.pos, b.quat, c.rB),
-            }));
-            for (const r of refPts) {
-                let best = gotPts[0];
-                let bestD = Infinity;
-                for (const g of gotPts) {
-                    const d =
-                        dot(sub(g.xA, r.xA), sub(g.xA, r.xA)) +
-                        dot(sub(g.xB, r.xB), sub(g.xB, r.xB));
-                    if (d < bestD) {
-                        bestD = d;
-                        best = g;
-                    }
-                }
-                for (let i = 0; i < 3; i++) {
-                    expect(best.xA[i]).toBeCloseTo(r.xA[i], 6);
-                    expect(best.xB[i]).toBeCloseTo(r.xB[i], 6);
+        // match each reference contact to its hull twin by nearest world anchor, then compare both
+        // anchors + the signed gap (order-independent — the reduce may emit a different rotation).
+        const refPts = ref.contacts.map((c) => ({
+            xA: worldXA(a.pos, a.quat, c.rA),
+            xB: worldXA(b.pos, b.quat, c.rB),
+        }));
+        const gotPts = got.contacts.map((c) => ({
+            xA: worldXA(a.pos, a.quat, c.rA),
+            xB: worldXA(b.pos, b.quat, c.rB),
+        }));
+        for (const r of refPts) {
+            let best = gotPts[0];
+            let bestD = Infinity;
+            for (const g of gotPts) {
+                const d =
+                    dot(sub(g.xA, r.xA), sub(g.xA, r.xA)) + dot(sub(g.xB, r.xB), sub(g.xB, r.xB));
+                if (d < bestD) {
+                    bestD = d;
+                    best = g;
                 }
             }
+            for (let i = 0; i < 3; i++) {
+                expect(best.xA[i]).toBeCloseTo(r.xA[i], 6);
+                expect(best.xB[i]).toBeCloseTo(r.xB[i], 6);
+            }
         }
-    },
-);
+    }
+}, 250);
 
 // ── gate 2: bullet3-sat-harness cross-check (tet, cone) ───────────────
 
@@ -144,39 +139,35 @@ const HULLS: Record<string, [Hull, Hull]> = {
     "cone8-tet-overlap": [coneHull(0.3, 0.8, 8), tetHull(0.5)],
 };
 
-check(
-    "hull SAT — bullet3-sat-harness cross-check (tet, cone)",
-    { claim: "non-box hull SAT preserves every bounded Bullet axis" },
-    () => {
-        for (const cfg of hullGold as HullGoldConfig[]) {
-            const [hullA, hullB] = HULLS[cfg.name];
-            const { contacts, basis } = collideHull(
-                hullA,
-                cfg.posA as Vec3,
-                cfg.quatA as Quat,
-                hullB,
-                cfg.posB as Vec3,
-                cfg.quatB as Quat,
-            );
+test("non-box hull SAT preserves every bounded Bullet axis", () => {
+    for (const cfg of hullGold as HullGoldConfig[]) {
+        const [hullA, hullB] = HULLS[cfg.name];
+        const { contacts, basis } = collideHull(
+            hullA,
+            cfg.posA as Vec3,
+            cfg.quatA as Quat,
+            hullB,
+            cfg.posB as Vec3,
+            cfg.quatB as Quat,
+        );
 
-            if (cfg.separated) {
-                expect(contacts.length).toBe(0);
-                return;
-            }
-
-            // Bullet uses an always-A reference convention and reports depths along its reference *face*
-            // normal; we pick the winning-hull reference (so box-as-hull matches box-box, gate 1). The
-            // contact points + depths are reference-dependent and not bit-comparable across the two. The
-            // reference-INDEPENDENT invariant is the separating axis: it validates the SAT axis search
-            // (b3FindSeparatingAxis) on the genuinely non-box geometry (slanted tet faces, the cone's many
-            // faces + edges) — the one thing box-box can't exercise (gate 1 validates the manifold pipeline
-            // exactly on boxes). Bullet's sepN is B→A like our basis row 0; gate it up to sign.
-            const sepN = cfg.separatingNormal as Vec3;
-            expect(contacts.length).toBeGreaterThan(0);
-            expect(Math.abs(dot(basis[0], sepN))).toBeCloseTo(1, 3);
+        if (cfg.separated) {
+            expect(contacts.length).toBe(0);
+            return;
         }
-    },
-);
+
+        // Bullet uses an always-A reference convention and reports depths along its reference *face*
+        // normal; we pick the winning-hull reference (so box-as-hull matches box-box, gate 1). The
+        // contact points + depths are reference-dependent and not bit-comparable across the two. The
+        // reference-INDEPENDENT invariant is the separating axis: it validates the SAT axis search
+        // (b3FindSeparatingAxis) on the genuinely non-box geometry (slanted tet faces, the cone's many
+        // faces + edges) — the one thing box-box can't exercise (gate 1 validates the manifold pipeline
+        // exactly on boxes). Bullet's sepN is B→A like our basis row 0; gate it up to sign.
+        const sepN = cfg.separatingNormal as Vec3;
+        expect(contacts.length).toBeGreaterThan(0);
+        expect(Math.abs(dot(basis[0], sepN))).toBeCloseTo(1, 3);
+    }
+}, 250);
 
 // ── dispatch + capsule segment-clip + through the solver ─────────────
 
@@ -185,102 +176,75 @@ const COLLISION_MARGIN = 0.01;
 
 // a box-hull body vs a box body routes through the hull SAT (collideHull) and must agree with the
 // box-box SAT on the normal + contact count — the dispatch wiring over the geometry gate 1 already pins.
-check(
-    "box-hull vs box (dispatch) agrees with box-box on the normal + count",
-    { claim: "hull dispatch agrees with box-box normal and contact count" },
-    () => {
-        const a = body([1, 1, 1], 1, 0.5, [0, 0.97, 0]); // a unit box resting (shallow, interior) on a ground
-        const ground = body([10, 1, 10], 0, 0.5, [0, 0, 0]);
-        const groundHull = hull(boxHull([10, 1, 10]), 0, 0.5, [0, 0, 0]);
-        const ref = collide(
-            { pos: a.posLin, quat: a.posAng, size: a.size },
-            {
-                pos: ground.posLin,
-                quat: ground.posAng,
-                size: ground.size,
-            },
-        );
-        const got = narrowphase(a, groundHull);
-        expect(ref.contacts.length).toBe(4); // a 4-point face manifold (the realistic rest)
-        expect(got.contacts.length).toBe(ref.contacts.length);
-        for (let i = 0; i < 3; i++) expect(got.basis[0][i]).toBeCloseTo(ref.basis[0][i], 7);
-    },
-);
+test("hull dispatch agrees with box-box normal and contact count", () => {
+    const a = body([1, 1, 1], 1, 0.5, [0, 0.97, 0]); // a unit box resting (shallow, interior) on a ground
+    const ground = body([10, 1, 10], 0, 0.5, [0, 0, 0]);
+    const groundHull = hull(boxHull([10, 1, 10]), 0, 0.5, [0, 0, 0]);
+    const ref = collide(
+        { pos: a.posLin, quat: a.posAng, size: a.size },
+        {
+            pos: ground.posLin,
+            quat: ground.posAng,
+            size: ground.size,
+        },
+    );
+    const got = narrowphase(a, groundHull);
+    expect(ref.contacts.length).toBe(4); // a 4-point face manifold (the realistic rest)
+    expect(got.contacts.length).toBe(ref.contacts.length);
+    for (let i = 0; i < 3; i++) expect(got.basis[0][i]).toBeCloseTo(ref.basis[0][i], 7);
+}, 250);
 
-check(
-    "hull vs hull (two box-hulls) produces a 4-point resting manifold",
-    { claim: "hull dispatch produces a four-point box-hull rest manifold" },
-    () => {
-        const top = hull(boxHull([1, 1, 1]), 1, 0.5, [0, 0.97, 0]);
-        const bottom = hull(boxHull([10, 1, 10]), 0, 0.5, [0, 0, 0]);
-        const { contacts, basis } = narrowphase(top, bottom);
-        expect(contacts.length).toBe(4);
-        for (let i = 0; i < 3; i++) expect(basis[0][i]).toBeCloseTo([0, 1, 0][i], 6); // B→A points up
-    },
-);
+test("hull dispatch produces a four-point box-hull rest manifold", () => {
+    const top = hull(boxHull([1, 1, 1]), 1, 0.5, [0, 0.97, 0]);
+    const bottom = hull(boxHull([10, 1, 10]), 0, 0.5, [0, 0, 0]);
+    const { contacts, basis } = narrowphase(top, bottom);
+    expect(contacts.length).toBe(4);
+    for (let i = 0; i < 3; i++) expect(basis[0][i]).toBeCloseTo([0, 1, 0][i], 6); // B→A points up
+}, 250);
 
 // a long capsule lying horizontally over a SMALL box: the segment (x ∈ [−1.5, 1.5]) overhangs the box
 // top face (x ∈ [−0.5, 0.5]) on both ends. Endpoint sampling would anchor the contacts at the far
 // overhanging endpoints (off the face); the segment-clip clips the core to the face region, so the two
 // contacts land at the face edges (x ≈ ±0.5) over the top face — the stable rest.
-check(
-    "a capsule overhanging a small box rests on the face region, not the overhanging tips",
-    { claim: "capsule segment clipping anchors overhanging contacts on the face" },
-    () => {
-        const cap = capsule(1.5, 0.4, 1, 0.5, [0, 0.9, 0], [0, 0, 0], Z90); // half-length 1.5, horizontal
-        const box = body([1, 1, 1], 0, 0.5, [0, 0, 0]); // top face y = 0.5, spans x ∈ [−0.5, 0.5]
-        const { contacts, basis } = narrowphase(cap, box);
-        expect(contacts.length).toBe(2);
-        for (let i = 0; i < 3; i++) expect(basis[0][i]).toBeCloseTo([0, 1, 0][i], 6); // shared up normal
-        // both capsule-core anchors sit over the face (|x| ≤ 0.5 + ε), NOT at the ±1.5 overhang tips
-        for (const c of contacts) {
-            const core = add(rotate(cap.posAng, c.rA), cap.posLin);
-            expect(Math.abs(core[0])).toBeLessThanOrEqual(0.5 + 1e-6);
-        }
-    },
-);
+test("capsule segment clipping anchors overhanging contacts on the face", () => {
+    const cap = capsule(1.5, 0.4, 1, 0.5, [0, 0.9, 0], [0, 0, 0], Z90); // half-length 1.5, horizontal
+    const box = body([1, 1, 1], 0, 0.5, [0, 0, 0]); // top face y = 0.5, spans x ∈ [−0.5, 0.5]
+    const { contacts, basis } = narrowphase(cap, box);
+    expect(contacts.length).toBe(2);
+    for (let i = 0; i < 3; i++) expect(basis[0][i]).toBeCloseTo([0, 1, 0][i], 6); // shared up normal
+    // both capsule-core anchors sit over the face (|x| ≤ 0.5 + ε), NOT at the ±1.5 overhang tips
+    for (const c of contacts) {
+        const core = add(rotate(cap.posAng, c.rA), cap.posLin);
+        expect(Math.abs(core[0])).toBeLessThanOrEqual(0.5 + 1e-6);
+    }
+}, 250);
 
 // a box-hull dropped on a box ground settles at the box-box margin rest; the hull pipeline end to end
 // (the hull bounding radius broadphase → collideHull → the contact Force → BDF1 settle).
-check(
-    "a box-hull rests on a box ground at the margin rest",
-    {
-        claim: "hull solver settles a box-hull at the collision margin",
-    },
-    () => {
-        const s = makeSolver([
-            body([10, 1, 10], 0, 0.5, [0, 0, 0]), // static box ground, top at y = 0.5
-            hull(boxHull([1, 1, 1]), 1, 0.5, [0, 3, 0]), // a unit box-hull dropped from above
-        ]);
-        for (let f = 0; f < 600; f++) step(s);
-        const cube = s.bodies[1];
-        expect(length(cube.velLin)).toBeLessThan(2e-3);
-        // half-height 0.5 above the ground top (0.5), sunk a small mg/k below the margin
-        expect(Math.abs(cube.posLin[1] - (0.5 + 0.5 - COLLISION_MARGIN))).toBeLessThan(3e-3);
-    },
-);
+test("hull solver settles a box-hull at the collision margin", () => {
+    const s = makeSolver([
+        body([10, 1, 10], 0, 0.5, [0, 0, 0]), // static box ground, top at y = 0.5
+        hull(boxHull([1, 1, 1]), 1, 0.5, [0, 3, 0]), // a unit box-hull dropped from above
+    ]);
+    for (let f = 0; f < 600; f++) step(s);
+    const cube = s.bodies[1];
+    expect(length(cube.velLin)).toBeLessThan(2e-3);
+    // half-height 0.5 above the ground top (0.5), sunk a small mg/k below the margin
+    expect(Math.abs(cube.posLin[1] - (0.5 + 0.5 - COLLISION_MARGIN))).toBeLessThan(3e-3);
+}, 250);
 
-check(
-    "two box-hulls stack on a box ground",
-    {
-        claim: "hull solver settles two stacked box-hulls",
-        size: "integration",
-        subject: ["tests/solver.ts", "tests/hull.ts", "tests/rounded.ts"],
-        budget: 20000,
-    },
-    () => {
-        const s = makeSolver([
-            body([10, 1, 10], 0, 0.5, [0, 0, 0]),
-            hull(boxHull([1, 1, 1]), 1, 0.5, [0, 1.2, 0]),
-            hull(boxHull([1, 1, 1]), 1, 0.5, [0, 2.4, 0]),
-        ]);
-        for (let f = 0; f < 800; f++) step(s);
-        const lower = s.bodies[1];
-        const upper = s.bodies[2];
-        expect(length(lower.velLin)).toBeLessThan(5e-3);
-        expect(length(upper.velLin)).toBeLessThan(5e-3);
-        // resting heights: lower centre ≈ 1.0, upper ≈ 2.0 (each a unit cube), within a few mg/k
-        expect(Math.abs(lower.posLin[1] - 1.0)).toBeLessThan(2e-2);
-        expect(Math.abs(upper.posLin[1] - 2.0)).toBeLessThan(3e-2);
-    },
-);
+test("hull solver settles two stacked box-hulls", () => {
+    const s = makeSolver([
+        body([10, 1, 10], 0, 0.5, [0, 0, 0]),
+        hull(boxHull([1, 1, 1]), 1, 0.5, [0, 1.2, 0]),
+        hull(boxHull([1, 1, 1]), 1, 0.5, [0, 2.4, 0]),
+    ]);
+    for (let f = 0; f < 800; f++) step(s);
+    const lower = s.bodies[1];
+    const upper = s.bodies[2];
+    expect(length(lower.velLin)).toBeLessThan(5e-3);
+    expect(length(upper.velLin)).toBeLessThan(5e-3);
+    // resting heights: lower centre ≈ 1.0, upper ≈ 2.0 (each a unit cube), within a few mg/k
+    expect(Math.abs(lower.posLin[1] - 1.0)).toBeLessThan(2e-2);
+    expect(Math.abs(upper.posLin[1] - 2.0)).toBeLessThan(3e-2);
+}, 20000);

@@ -1,5 +1,5 @@
-import { expect } from "bun:test";
-import { check } from "@dylanebert/shallot/harness/check";
+import { expect, test } from "bun:test";
+
 import { UnsupportedError } from "@dylanebert/shallot/runtime";
 import { CONTACT_VEC4, CONTACTS_PER_PAIR, checkContactStore, PAIRS_PER_BODY } from "../src/step";
 
@@ -12,46 +12,34 @@ const DEFAULT_BINDING_LIMIT = 128 * MB; // the WebGPU maxStorageBufferBindingSiz
 const storeBytes = (eidCount: number): number =>
     eidCount * PAIRS_PER_BODY * CONTACTS_PER_PAIR * CONTACT_VEC4 * 16;
 
-check(
-    "a full-capacity store exceeds the 128 MB default and fails loud + clear",
-    { claim: "contact store rejects a full-capacity binding over the default limit" },
-    () => {
-        // the case the guard exists for: at 65536 eids the per-eid store is ~235 MB, over the default
-        // binding limit — it binds only because acquireDevice now requests the adapter's full size.
-        expect(storeBytes(65536)).toBeGreaterThan(DEFAULT_BINDING_LIMIT);
-        let caught: unknown;
-        try {
-            checkContactStore(65536, DEFAULT_BINDING_LIMIT);
-        } catch (e) {
-            caught = e;
-        }
-        expect(caught).toBeInstanceOf(UnsupportedError);
-        // the message names the buffer + the needed-vs-available + a remedy (loud + clear, not a bare throw).
-        // The remedy points at `capacity` — the engine sizes the pool to it (Phase 4.9 size-to-capacity).
-        const msg = (caught as Error).message;
-        expect(msg).toContain("contact store");
-        expect(msg).toContain("maxStorageBufferBindingSize");
-        expect(msg).toContain("capacity");
-    },
-);
+test("contact store rejects a full-capacity binding over the default limit", () => {
+    // the case the guard exists for: at 65536 eids the per-eid store is ~235 MB, over the default
+    // binding limit — it binds only because acquireDevice now requests the adapter's full size.
+    expect(storeBytes(65536)).toBeGreaterThan(DEFAULT_BINDING_LIMIT);
+    let caught: unknown;
+    try {
+        checkContactStore(65536, DEFAULT_BINDING_LIMIT);
+    } catch (e) {
+        caught = e;
+    }
+    expect(caught).toBeInstanceOf(UnsupportedError);
+    // the message names the buffer + the needed-vs-available + a remedy (loud + clear, not a bare throw).
+    // The remedy points at `capacity` — the engine sizes the pool to it (Phase 4.9 size-to-capacity).
+    const msg = (caught as Error).message;
+    expect(msg).toContain("contact store");
+    expect(msg).toContain("maxStorageBufferBindingSize");
+    expect(msg).toContain("capacity");
+}, 250);
 
-check(
-    "a small-capacity store fits under the default",
-    { claim: "contact store accepts a small capacity under the default limit" },
-    () => {
-        // an 8192-eid store → ~28 MB, well under the 128 MB default — a small-capacity scene needs no raised
-        // limit (the store sizes to capacity, so this is a capacity ≈ 8192 scene).
-        expect(storeBytes(8192)).toBeLessThanOrEqual(DEFAULT_BINDING_LIMIT);
-        expect(() => checkContactStore(8192, DEFAULT_BINDING_LIMIT)).not.toThrow();
-    },
-);
+test("contact store accepts a small capacity under the default limit", () => {
+    // an 8192-eid store → ~28 MB, well under the 128 MB default — a small-capacity scene needs no raised
+    // limit (the store sizes to capacity, so this is a capacity ≈ 8192 scene).
+    expect(storeBytes(8192)).toBeLessThanOrEqual(DEFAULT_BINDING_LIMIT);
+    expect(() => checkContactStore(8192, DEFAULT_BINDING_LIMIT)).not.toThrow();
+}, 250);
 
-check(
-    "the boundary is exclusive: exactly at the limit fits, one byte over throws",
-    { claim: "contact store boundary accepts exact capacity and rejects one byte over" },
-    () => {
-        const exact = storeBytes(8192);
-        expect(() => checkContactStore(8192, exact)).not.toThrow();
-        expect(() => checkContactStore(8192, exact - 1)).toThrow(UnsupportedError);
-    },
-);
+test("contact store boundary accepts exact capacity and rejects one byte over", () => {
+    const exact = storeBytes(8192);
+    expect(() => checkContactStore(8192, exact)).not.toThrow();
+    expect(() => checkContactStore(8192, exact - 1)).toThrow(UnsupportedError);
+}, 250);

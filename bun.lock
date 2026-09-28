@@ -6,7 +6,7 @@
       "name": "@dylanebert/shallot-avbd-physics",
       "devDependencies": {
         "@biomejs/biome": "^2.5.13",
-        "@dylanebert/shallot": "github:dylanebert/shallot#69f12a06438d8ce80aa1ab9e4b34de5b58820e15",
+        "@dylanebert/shallot": "github:dylanebert/shallot#5ceae0633dae262bcd90506a9cd7c1b1ba79b770",
         "@types/bun": "latest",
         "@webgpu/types": "^0.1.72",
         "bun-webgpu": "github:dylanebert/bun-webgpu#7b75d0440d2f22e2c9a1cb383d15529652c53d98",
@@ -57,7 +57,7 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.5.13", "", { "os": "win32", "cpu": "x64" }, "sha512-VOofU/nW761XWzUeUNE8zzYNyPrxuMuNFMizL0qz7J75yeV8N7WFheUlk1/K6dOkaFpH9wJ+lDKlwjAbw0346w=="],
 
-    "@dylanebert/shallot": ["@dylanebert/shallot@github:dylanebert/shallot#69f12a0", { "dependencies": { "@babel/parser": "^8.0.4", "@types/node": "^26.2.0", "@webgpu/types": "^0.1.72", "unplugin-typegpu": "~0.12.3", "vite": "^8.3.0" }, "peerDependencies": { "bun-webgpu": ">=0.1.7", "playwright": "^1.0.0", "typegpu": "~0.12.5" }, "optionalPeers": ["bun-webgpu", "playwright"], "bin": { "shallot": "./bin/shallot.ts" } }, "dylanebert-shallot-69f12a0", "sha512-d0r0T4OfBxofwoGgtewH+I9/I6TQSAK2PWw5qy8gJ4s96AEhHHp2DH4/MGeMQchq6sJUWuOYzqARyD/KUxF+ag=="],
+    "@dylanebert/shallot": ["@dylanebert/shallot@github:dylanebert/shallot#5ceae06", { "dependencies": { "@babel/parser": "^8.0.4", "@types/node": "^26.2.0", "@webgpu/types": "^0.1.72", "unplugin-typegpu": "~0.12.3", "vite": "^8.3.0" }, "peerDependencies": { "bun-webgpu": ">=0.1.7", "playwright": "^1.0.0", "typegpu": "~0.12.5" }, "optionalPeers": ["bun-webgpu", "playwright"], "bin": { "shallot": "./bin/shallot.ts" } }, "dylanebert-shallot-5ceae06", "sha512-yokR7d7f+hICq4KlTRb5U7I44swsFWexu2JnnpdvQM44DEXPVR1K4TKQOie/Ymm/4p3qYbXbwmlogmZvx/yflg=="],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 

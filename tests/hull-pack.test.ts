@@ -1,5 +1,5 @@
-import { expect } from "bun:test";
-import { check } from "@dylanebert/shallot/harness/check";
+import { expect, test } from "bun:test";
+
 import { type Hull, Hulls, UNIT_CUBE_ID } from "@dylanebert/shallot/physics";
 import { HULL_FACE_STRIDE, HULL_HEADER, packHulls } from "../src/hull";
 import { boxHull, tetHull } from "./hull";
@@ -64,41 +64,34 @@ function expectHull(got: Decoded, want: Omit<Hull, "name">): void {
         for (let k = 0; k < 3; k++) expect(got.edges[e][k]).toBeCloseTo(want.edges[e][k], 6);
 }
 
-check(
-    "a box-hull + a tet-hull pack and decode back to their source geometry",
-    { claim: "packed hulls round-trip box and tetrahedron geometry" },
-    () => {
-        const box = boxHull([2, 1, 3]);
-        const tet = tetHull(0.5);
-        const boxId = Hulls.register({ name: "pack-box", ...box });
-        const tetId = Hulls.register({ name: "pack-tet", ...tet });
-        const buf = packHulls();
+test("packed hulls round-trip box and tetrahedron geometry", () => {
+    const box = boxHull([2, 1, 3]);
+    const tet = tetHull(0.5);
+    const boxId = Hulls.register({ name: "pack-box", ...box });
+    const tetId = Hulls.register({ name: "pack-tet", ...tet });
+    const buf = packHulls();
 
-        expectHull(decode(buf, boxId), box);
-        expectHull(decode(buf, tetId), tet);
-    },
-);
+    expectHull(decode(buf, boxId), box);
+    expectHull(decode(buf, tetId), tet);
+}, 250);
 
-check(
-    "the built-in unit cube packs at UNIT_CUBE_ID (a box collides as this cube × half-extents)",
-    { claim: "packed hulls preserve the built-in unit cube geometry" },
-    () => {
-        // the scale-unified box path reads this hull for EVERY box × hull collision, so its geometry is
-        // load-bearing: 8 verts at ±1, 6 axis-aligned faces (offset 1), 3 unique edge directions.
-        const cube = decode(packHulls(), UNIT_CUBE_ID);
-        expect(cube.verts.length).toBe(8);
-        for (const v of cube.verts) for (const c of v) expect(Math.abs(c)).toBeCloseTo(1, 6);
-        expect(cube.faces.length).toBe(6);
-        for (const f of cube.faces) {
-            expect(f.offset).toBeCloseTo(1, 6);
-            expect(
-                Math.abs(f.normal[0]) + Math.abs(f.normal[1]) + Math.abs(f.normal[2]),
-            ).toBeCloseTo(1, 6);
-        }
-        expect(cube.edges).toEqual([
-            [1, 0, 0],
-            [0, 1, 0],
-            [0, 0, 1],
-        ]);
-    },
-);
+test("packed hulls preserve the built-in unit cube geometry", () => {
+    // the scale-unified box path reads this hull for EVERY box × hull collision, so its geometry is
+    // load-bearing: 8 verts at ±1, 6 axis-aligned faces (offset 1), 3 unique edge directions.
+    const cube = decode(packHulls(), UNIT_CUBE_ID);
+    expect(cube.verts.length).toBe(8);
+    for (const v of cube.verts) for (const c of v) expect(Math.abs(c)).toBeCloseTo(1, 6);
+    expect(cube.faces.length).toBe(6);
+    for (const f of cube.faces) {
+        expect(f.offset).toBeCloseTo(1, 6);
+        expect(Math.abs(f.normal[0]) + Math.abs(f.normal[1]) + Math.abs(f.normal[2])).toBeCloseTo(
+            1,
+            6,
+        );
+    }
+    expect(cube.edges).toEqual([
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+    ]);
+}, 250);

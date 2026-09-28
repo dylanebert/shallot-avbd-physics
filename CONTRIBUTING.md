@@ -6,13 +6,17 @@ For anyone changing the solver, person or agent. Each API's contract is the JSDo
 bun install --frozen-lockfile
 bun run check
 bun run test
-bun run test -- --integration --base <ref> --diff <ref>   # tests whose subject changed
-bun run test -- --list
+bun test ./tests/oracle.oracle.ts
+bun test ./tests/corpus.oracle.ts
+bun test ./tests/differential.gpu.ts
+bun test ./tests/headless.gpu.ts
 ```
 
 - `src/` is the plugin, the GPU step, the narrowphase and hull packing; `src/core.ts` is the public `/core` export. Shallot is imported only through its public package exports.
-- `tests/` holds the f64 CPU oracle, a port of the reference C++, with committed gold vectors. The corpus and closed-form tests are the evidence, and `bun run test` runs them. A CPU test under the unit budget is a unit test; one over it in the full sweep is an integration test whose subject names the solver files it steps. A GPU-authored buffer is proved by a real-device probe; a missing GPU seat is inconclusive, never green. A rendered claim, if one is ever admitted, uses Shallot's public `captureFrame` contract.
-- `tests/character-sweep.test.ts` and the character rows of `tests/headless.test.ts` gate the engine's shipped character. They stay here until they move.
-- `peerDependencies` is the compatibility range. The dev dependency and `bun.lock` carry a full-SHA Git pin of Shallot until a stable release replaces it. Never link a second `typegpu`; a Vite consumer dedupes `@dylanebert/shallot` and `typegpu`. Package states, linking and exit: [Shallot's CONTRIBUTING](https://github.com/dylanebert/shallot/blob/main/CONTRIBUTING.md#pins-and-dependencies).
+- `*.test.ts` files are the cheap Bun tier; each test's name is its claim and its timeout is its budget. The `test` script sets the default timeout to 250 ms.
+- `*.oracle.ts` files are the CPU f64 oracle tier. `*.gpu.ts` files require a real WebGPU device; run each named file by path, and a missing device is a failure, not a skip. The Bun preload locally registers TypeGPU's transform for tests that evaluate TGSL kernels.
+- `tests/` holds the f64 CPU oracle, a port of the reference C++, with committed gold vectors. The corpus and closed-form tests are the evidence. A GPU-authored buffer is proved by a real-device probe; a missing GPU seat is inconclusive, never green. A rendered claim, if one is ever admitted, uses Shallot's public `captureFrame` contract.
+- `tests/character-sweep.test.ts` and the character rows of `tests/headless.gpu.ts` gate the engine's shipped character. They stay here until they move.
+- `peerDependencies` is the compatibility range. The dev dependency and `bun.lock` carry a full-SHA Git pin of Shallot until a stable release replaces it. The engine's `shallot()` Vite plugin owns the Vite-side TypeGPU transform and deduplication; the Bun test preload is a separate test-only need. Package states, linking and exit: [Shallot's CONTRIBUTING](https://github.com/dylanebert/shallot/blob/main/CONTRIBUTING.md#pins-and-dependencies).
 - A release is a `v<version>` tag matching `package.json`. The release workflow runs `check` and `test` before publishing.
 - Retired examples live in Git tags, listed in `ARCHIVE.md`.

@@ -1,5 +1,5 @@
-import { expect } from "bun:test";
-import { check } from "@dylanebert/shallot/harness/check";
+import { expect, test } from "bun:test";
+
 import { type Cand, reduceManifold } from "./collide";
 import type { Vec3 } from "./math";
 import gold from "./reduce-gold.json";
@@ -25,23 +25,19 @@ interface GoldCase {
 
 const key = (p: Vec3): string => p.map((x) => x.toFixed(9)).join(",");
 
-check(
-    "contact-manifold reduction vs verbatim-Jolt gold",
-    { claim: "manifold reduction preserves every bounded verbatim-Jolt gold set" },
-    () => {
-        for (const cfg of gold.cases as GoldCase[]) {
-            const cands: Cand[] = cfg.points.map((p, i) => ({
-                feature: i,
-                xA: p.xA as Vec3,
-                xB: p.xB as Vec3,
-            }));
-            const sel = reduceManifold(cands, cfg.axis as Vec3, cfg.com as Vec3);
+test("manifold reduction preserves every bounded verbatim-Jolt gold set", () => {
+    for (const cfg of gold.cases as GoldCase[]) {
+        const cands: Cand[] = cfg.points.map((p, i) => ({
+            feature: i,
+            xA: p.xA as Vec3,
+            xB: p.xB as Vec3,
+        }));
+        const sel = reduceManifold(cands, cfg.axis as Vec3, cfg.com as Vec3);
 
-            // Jolt keeps 2-4; the oracle must keep the same count and the same physical points.
-            expect(sel.length).toBe(cfg.keep.length);
-            const got = new Set(sel.map((c) => key(c.xA)));
-            const want = new Set(cfg.keep.map((i) => key(cfg.points[i].xA as Vec3)));
-            expect(got).toEqual(want);
-        }
-    },
-);
+        // Jolt keeps 2-4; the oracle must keep the same count and the same physical points.
+        expect(sel.length).toBe(cfg.keep.length);
+        const got = new Set(sel.map((c) => key(c.xA)));
+        const want = new Set(cfg.keep.map((i) => key(cfg.points[i].xA as Vec3)));
+        expect(got).toEqual(want);
+    }
+}, 250);

@@ -1,10 +1,10 @@
+import { test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { check } from "@dylanebert/shallot/harness/check";
 
-const CANDIDATE_SHA = "69f12a06438d8ce80aa1ab9e4b34de5b58820e15";
-const CANDIDATE_TAG = `dylanebert-shallot-${CANDIDATE_SHA.slice(0, 7)}`;
+const SHALLOT_SHA = "5ceae0633dae262bcd90506a9cd7c1b1ba79b770";
+const SHALLOT_TAG = `dylanebert-shallot-${SHALLOT_SHA.slice(0, 7)}`;
 
 interface CommandResult {
     code: number;
@@ -39,105 +39,79 @@ function jsonFile(path: string): Record<string, unknown> {
     return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
 }
 
-check(
-    "packed AVBD identity and public boundary work in a scratch consumer",
-    {
-        claim: "packed AVBD identity and public boundary work in a scratch consumer",
-        size: "integration",
-        subject: [
-            "package.json",
-            "bun.lock",
-            "AGENTS.md",
-            "README.md",
-            "shallot.json",
-            ".github/workflows/test-surface.yml",
-        ],
-        budget: 20000,
-    },
-    () => {
-        const root = process.cwd();
-        const manifest = jsonFile(resolve(root, "package.json"));
-        const lock = readFileSync(resolve(root, "bun.lock"), "utf8");
-        const devDependencies = manifest.devDependencies as Record<string, unknown>;
-        if (
-            devDependencies["@dylanebert/shallot"] !== `github:dylanebert/shallot#${CANDIDATE_SHA}`
-        ) {
-            throw new Error("package.json does not carry the qualified full-SHA Shallot candidate");
-        }
-        if (
-            !lock.includes(
-                `@dylanebert/shallot@github:dylanebert/shallot#${CANDIDATE_SHA.slice(0, 7)}`,
-            )
-        ) {
-            throw new Error("bun.lock does not carry the qualified Shallot candidate");
-        }
+test("packed AVBD identity and public boundary work in a scratch consumer", () => {
+    const root = process.cwd();
+    const manifest = jsonFile(resolve(root, "package.json"));
+    const lock = readFileSync(resolve(root, "bun.lock"), "utf8");
+    const devDependencies = manifest.devDependencies as Record<string, unknown>;
+    const shallotDependency = devDependencies["@dylanebert/shallot"];
+    const candidateTarball =
+        typeof shallotDependency === "string" && shallotDependency.endsWith(".tgz");
+    if (!candidateTarball && shallotDependency !== `github:dylanebert/shallot#${SHALLOT_SHA}`) {
+        throw new Error("package.json does not carry the qualified full-SHA Shallot pin");
+    }
+    const expectedLockEntry = candidateTarball
+        ? `@dylanebert/shallot@${shallotDependency}`
+        : `@dylanebert/shallot@github:dylanebert/shallot#${SHALLOT_SHA.slice(0, 7)}`;
+    if (!lock.includes(expectedLockEntry)) {
+        throw new Error("bun.lock does not resolve the declared Shallot dependency");
+    }
 
-        const scratchDir = mkdtempSync(join(tmpdir(), "shallot-avbd-consumer-"));
-        const packDir = join(scratchDir, "pack");
-        try {
-            mkdirSync(packDir);
-            const packed = runChecked(
-                [process.execPath, "pm", "pack", "--destination", packDir],
-                root,
-            );
-            const artifactName = packed.stdout
-                .split("\n")
-                .map((line) => line.trim())
-                .find((line) => line.endsWith(".tgz"));
-            if (artifactName === undefined)
-                throw new Error("bun pm pack did not report an artifact");
-            const artifact = resolve(packDir, artifactName);
-            const archive = runChecked(["tar", "-tzf", artifact], root).stdout;
-            for (const entry of [
-                "package/package.json",
-                "package/src/core.ts",
-                "package/src/index.ts",
-            ]) {
-                if (!archive.split("\n").includes(entry))
-                    throw new Error(`package preflight omitted ${entry}`);
-            }
-            const packedManifest = JSON.parse(
-                runChecked(["tar", "-xOf", artifact, "package/package.json"], root).stdout,
-            ) as Record<string, unknown>;
-            if (
-                packedManifest.name !== manifest.name ||
-                packedManifest.version !== manifest.version
-            ) {
-                throw new Error("package preflight identity differs from the project manifest");
-            }
-            const packedExports = packedManifest.exports as Record<string, unknown>;
-            if (packedExports["./core"] !== "./src/core.ts")
-                throw new Error("package preflight omitted the public /core export");
+    const scratchDir = mkdtempSync(join(tmpdir(), "shallot-avbd-consumer-"));
+    const packDir = join(scratchDir, "pack");
+    try {
+        mkdirSync(packDir);
+        const packed = runChecked([process.execPath, "pm", "pack", "--destination", packDir], root);
+        const artifactName = packed.stdout
+            .split("\n")
+            .map((line) => line.trim())
+            .find((line) => line.endsWith(".tgz"));
+        if (artifactName === undefined) throw new Error("bun pm pack did not report an artifact");
+        const artifact = resolve(packDir, artifactName);
+        const archive = runChecked(["tar", "-tzf", artifact], root).stdout;
+        for (const entry of [
+            "package/package.json",
+            "package/src/core.ts",
+            "package/src/index.ts",
+        ]) {
+            if (!archive.split("\n").includes(entry))
+                throw new Error(`package preflight omitted ${entry}`);
+        }
+        const packedManifest = JSON.parse(
+            runChecked(["tar", "-xOf", artifact, "package/package.json"], root).stdout,
+        ) as Record<string, unknown>;
+        if (packedManifest.name !== manifest.name || packedManifest.version !== manifest.version) {
+            throw new Error("package preflight identity differs from the project manifest");
+        }
+        const packedExports = packedManifest.exports as Record<string, unknown>;
+        if (packedExports["./core"] !== "./src/core.ts")
+            throw new Error("package preflight omitted the public /core export");
 
-            writeFileSync(
-                resolve(scratchDir, "package.json"),
-                `${JSON.stringify(
-                    {
-                        name: "shallot-avbd-scratch-consumer",
-                        private: true,
-                        type: "module",
-                        packageManager: "bun@1.4.2",
-                        dependencies: {
-                            "@dylanebert/shallot-avbd-physics": `file:${relative(scratchDir, artifact)}`,
-                            "@dylanebert/shallot": `github:dylanebert/shallot#${CANDIDATE_SHA}`,
-                            typegpu: "0.12.5",
-                        },
+        writeFileSync(
+            resolve(scratchDir, "package.json"),
+            `${JSON.stringify(
+                {
+                    name: "shallot-avbd-scratch-consumer",
+                    private: true,
+                    type: "module",
+                    packageManager: "bun@1.4.2",
+                    dependencies: {
+                        "@dylanebert/shallot-avbd-physics": `file:${relative(scratchDir, artifact)}`,
+                        "@dylanebert/shallot": `github:dylanebert/shallot#${SHALLOT_SHA}`,
+                        typegpu: "0.12.5",
                     },
-                    null,
-                    2,
-                )}\n`,
-            );
-            runChecked([process.execPath, "install"], scratchDir);
-            rmSync(resolve(scratchDir, "node_modules"), { recursive: true, force: true });
-            runChecked([process.execPath, "install", "--frozen-lockfile"], scratchDir);
-            const cliDir = join(scratchDir, "cli");
-            mkdirSync(cliDir);
-
-            const probe = `
+                },
+                null,
+                2,
+            )}\n`,
+        );
+        runChecked([process.execPath, "install"], scratchDir);
+        rmSync(resolve(scratchDir, "node_modules"), { recursive: true, force: true });
+        runChecked([process.execPath, "install", "--frozen-lockfile"], scratchDir);
+        const probe = `
 import { createRequire } from "node:module";
-import { existsSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 import { AvbdPlugin } from "@dylanebert/shallot-avbd-physics";
 import { Avbd as CoreAvbd, MAX_CONTACTS } from "@dylanebert/shallot-avbd-physics/core";
 import avbd from "@dylanebert/shallot-avbd-physics/package.json";
@@ -149,6 +123,8 @@ if (typeof AvbdPlugin !== "object" || typeof CoreAvbd !== "object" || MAX_CONTAC
 if (avbd.name !== "@dylanebert/shallot-avbd-physics")
   throw new Error("installed AVBD package has the wrong identity");
 if (shallot.version !== "0.10.0") throw new Error("installed Shallot has the wrong version");
+if (Object.keys(shallot.exports).some((name) => name.includes("harness")))
+  throw new Error("installed Shallot exposes retired harness support");
 const shallotPath = realpathSync(resolve(import.meta.dir, "node_modules/@dylanebert/shallot"));
 const typegpuPath = realpathSync(resolve(import.meta.dir, "node_modules/typegpu"));
 const resolvedTypegpu = realpathSync(createRequire(resolve(shallotPath, "package.json")).resolve("typegpu/package.json"));
@@ -156,16 +132,11 @@ if (resolvedTypegpu !== resolve(typegpuPath, "package.json"))
   throw new Error("Shallot resolved a second TypeGPU instance");
 if (typegpu.version !== "0.12.5") throw new Error("installed TypeGPU has the wrong version");
 const tag = await Bun.file(resolve(shallotPath, ".bun-tag")).text();
-if (tag.trim() !== "${CANDIDATE_TAG}") throw new Error("installed Shallot is not the qualified candidate");
-const bin = resolve(import.meta.dir, "node_modules/.bin/shallot");
-if (!existsSync(bin)) throw new Error("installed Shallot bin is missing");
-const result = spawnSync(process.execPath, [bin, "test", "--list"], { cwd: resolve(import.meta.dir, "cli"), encoding: "utf8" });
-if (result.status !== 0) throw new Error("installed Shallot bin failed: " + result.stderr);
+if (tag.trim() !== "${SHALLOT_TAG}") throw new Error("installed Shallot is not the qualified pin");
 `;
-            writeFileSync(resolve(scratchDir, "probe.ts"), probe);
-            runChecked([process.execPath, "probe.ts"], scratchDir);
-        } finally {
-            rmSync(scratchDir, { recursive: true, force: true });
-        }
-    },
-);
+        writeFileSync(resolve(scratchDir, "probe.ts"), probe);
+        runChecked([process.execPath, "probe.ts"], scratchDir);
+    } finally {
+        rmSync(scratchDir, { recursive: true, force: true });
+    }
+}, 20000);

@@ -6,71 +6,51 @@
 // repair recolors the lower-eid endpoint of any same-color joint pair. The invariant: no dynamic joint
 // pair ends same-color when a free color exists within the cap.
 
-import { expect } from "bun:test";
-import { check } from "@dylanebert/shallot/harness/check";
+import { expect, test } from "bun:test";
+
 import { countConflicts, repairHardColors } from "./coloring";
 
-check(
-    "a forced same-color joint pair is repaired to different colors",
-    { claim: "hard joint coloring repairs a forced same-color pair" },
-    () => {
-        // the greedy folded both endpoints to color 0 (a tolerated soft outcome the greedy can produce past
-        // the cap); the repair must split them because the edge is HARD. Body 0 (lower eid) moves.
-        const mass = [1, 1];
-        const greedy = [0, 0]; // forced conflict
-        const out = repairHardColors([], [[0, 1]], greedy, mass, 8);
-        expect(out[0]).not.toBe(out[1]);
-        expect(countConflicts([[0, 1]], out, mass)).toBe(0);
-        expect(out[1]).toBe(0); // the higher-id endpoint stays fixed; the lower one moves
-    },
-);
+test("hard joint coloring repairs a forced same-color pair", () => {
+    // the greedy folded both endpoints to color 0 (a tolerated soft outcome the greedy can produce past
+    // the cap); the repair must split them because the edge is HARD. Body 0 (lower eid) moves.
+    const mass = [1, 1];
+    const greedy = [0, 0]; // forced conflict
+    const out = repairHardColors([], [[0, 1]], greedy, mass, 8);
+    expect(out[0]).not.toBe(out[1]);
+    expect(countConflicts([[0, 1]], out, mass)).toBe(0);
+    expect(out[1]).toBe(0); // the higher-id endpoint stays fixed; the lower one moves
+}, 250);
 
-check(
-    "an already-separated joint pair is left untouched",
-    { claim: "hard joint coloring preserves an already-separated pair" },
-    () => {
-        const out = repairHardColors([], [[0, 1]], [0, 1], [1, 1], 8);
-        expect(out).toEqual([0, 1]);
-    },
-);
+test("hard joint coloring preserves an already-separated pair", () => {
+    const out = repairHardColors([], [[0, 1]], [0, 1], [1, 1], 8);
+    expect(out).toEqual([0, 1]);
+}, 250);
 
-check(
-    "a soft (spring) same-color pair is NOT repaired — only joints trigger",
-    { claim: "coloring repair leaves a soft same-color pair unchanged" },
-    () => {
-        // the spring edge is `soft`: it's avoided but a folded same-color pair is tolerated (clean Jacobi).
-        const out = repairHardColors([[0, 1]], [], [0, 0], [1, 1], 8);
-        expect(out).toEqual([0, 0]);
-    },
-);
+test("coloring repair leaves a soft same-color pair unchanged", () => {
+    // the spring edge is `soft`: it's avoided but a folded same-color pair is tolerated (clean Jacobi).
+    const out = repairHardColors([[0, 1]], [], [0, 0], [1, 1], 8);
+    expect(out).toEqual([0, 0]);
+}, 250);
 
-check(
-    "a static-anchored joint never conflicts (the static endpoint is uncolored)",
-    { claim: "coloring repair ignores an uncolored static joint endpoint" },
-    () => {
-        // pendulum shape: static anchor 0 + dynamic bob 1. The static body imposes no scheduling constraint,
-        // so the bob keeps its color and the repair is a no-op — matching the GPU (statics are 0xffffffff).
-        const out = repairHardColors([], [[0, 1]], [0xffffffff, 0], [0, 1], 8);
-        expect(out[1]).toBe(0);
-    },
-);
+test("coloring repair ignores an uncolored static joint endpoint", () => {
+    // pendulum shape: static anchor 0 + dynamic bob 1. The static body imposes no scheduling constraint,
+    // so the bob keeps its color and the repair is a no-op — matching the GPU (statics are 0xffffffff).
+    const out = repairHardColors([], [[0, 1]], [0xffffffff, 0], [0, 1], 8);
+    expect(out[1]).toBe(0);
+}, 250);
 
-check(
-    "the repair avoids recoloring onto another neighbor's color",
-    { claim: "coloring repair avoids every neighbor color" },
-    () => {
-        // body 1 has a hard joint to body 2 (same color 0) AND a soft edge to body 0 (color 1). It must move
-        // off 0 (the hard conflict) but NOT onto 1 (body 0's color) — so it lands on 2.
-        const mass = [1, 1, 1];
-        const out = repairHardColors(
-            [[0, 1]], // soft: 1 avoids 0 (color 1)
-            [[1, 2]], // hard: 1 conflicts with 2 (both color 0); 1 < 2 so 1 moves
-            [1, 0, 0],
-            mass,
-            8,
-        );
-        expect(out[1]).not.toBe(out[2]); // hard conflict resolved
-        expect(out[1]).not.toBe(out[0]); // didn't move onto the soft neighbor's color
-        expect(out[1]).toBe(2);
-    },
-);
+test("coloring repair avoids every neighbor color", () => {
+    // body 1 has a hard joint to body 2 (same color 0) AND a soft edge to body 0 (color 1). It must move
+    // off 0 (the hard conflict) but NOT onto 1 (body 0's color) — so it lands on 2.
+    const mass = [1, 1, 1];
+    const out = repairHardColors(
+        [[0, 1]], // soft: 1 avoids 0 (color 1)
+        [[1, 2]], // hard: 1 conflicts with 2 (both color 0); 1 < 2 so 1 moves
+        [1, 0, 0],
+        mass,
+        8,
+    );
+    expect(out[1]).not.toBe(out[2]); // hard conflict resolved
+    expect(out[1]).not.toBe(out[0]); // didn't move onto the soft neighbor's color
+    expect(out[1]).toBe(2);
+}, 250);

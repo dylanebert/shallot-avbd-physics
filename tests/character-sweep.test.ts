@@ -1,4 +1,4 @@
-import { expect } from "bun:test";
+import { expect, test } from "bun:test";
 // the shipped runtime CPU sweep (src) — the third tier beside this f64 oracle (the spec) and the GPU
 // character pass; validated against the oracle here exactly as the GPU pass is gated against it in the gym.
 import {
@@ -8,7 +8,7 @@ import {
     type SweepDiag,
     sweepCharacter,
 } from "@dylanebert/shallot/character";
-import { check } from "@dylanebert/shallot/harness/check";
+
 import { type Character, character, moveCharacter } from "./character";
 import { boxHull } from "./hull";
 import { length, type Quat, scale, sub, type Vec3 } from "./math";
@@ -275,198 +275,156 @@ function scenes(): LockScene[] {
     return out;
 }
 
-check(
-    "pose / velocity / grounded match across the behavioral scenes",
-    {
-        claim: "CPU character sweep matches f64 oracle across bounded scenes",
-    },
-    () => {
-        let mp = 0;
-        let mv = 0;
-        let mpush = 0;
-        let gm = 0;
-        const log: string[] = [];
-        for (const s of scenes()) {
-            const r = lockstep(s);
-            mp = Math.max(mp, r.pos);
-            mv = Math.max(mv, r.vel);
-            mpush = Math.max(mpush, r.push);
-            gm += r.gm;
-            log.push(
-                `${s.name} pos ${r.pos.toExponential(1)}/vel ${r.vel.toExponential(1)}${r.push > 0 ? `/push ${r.push.toExponential(1)}` : ""}${r.gm ? ` GM×${r.gm}` : ""}`,
-            );
-        }
-        console.log(`[char-sweep] per-step parity — ${log.join(" · ")}`);
-        expect(gm).toBe(0); // grounded matches the oracle every frame
-        expect(mp).toBeLessThan(POS_TOL);
-        expect(mv).toBeLessThan(VEL_TOL);
-        expect(mpush).toBeLessThan(VEL_TOL);
-    },
-);
+test("CPU character sweep matches f64 oracle across bounded scenes", () => {
+    let mp = 0;
+    let mv = 0;
+    let mpush = 0;
+    let gm = 0;
+    const log: string[] = [];
+    for (const s of scenes()) {
+        const r = lockstep(s);
+        mp = Math.max(mp, r.pos);
+        mv = Math.max(mv, r.vel);
+        mpush = Math.max(mpush, r.push);
+        gm += r.gm;
+        log.push(
+            `${s.name} pos ${r.pos.toExponential(1)}/vel ${r.vel.toExponential(1)}${r.push > 0 ? `/push ${r.push.toExponential(1)}` : ""}${r.gm ? ` GM×${r.gm}` : ""}`,
+        );
+    }
+    console.log(`[char-sweep] per-step parity — ${log.join(" · ")}`);
+    expect(gm).toBe(0); // grounded matches the oracle every frame
+    expect(mp).toBeLessThan(POS_TOL);
+    expect(mv).toBeLessThan(VEL_TOL);
+    expect(mpush).toBeLessThan(VEL_TOL);
+}, 250);
 
 // ── behavioral semantics: the sweep run ALONE reproduces the oracle's slide / step / jump invariants ───
 
-check(
-    "drop-to-rest: settles on the floor, grounded, no residual jitter",
-    { claim: "CPU character sweep settles on the floor" },
-    () => {
-        const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 3, 0])));
-        const ss = [sweepBody(ground([0, 0, 0]))];
-        for (let f = 0; f < 200; f++) sweepCharacter(sc, [0, 0, 0], ss, G, DT);
-        console.log(
-            `[char-sweep] drop-to-rest y ${sc.pos[1].toFixed(4)} (rest ${restY}), grounded ${sc.grounded}`,
-        );
-        expect(Math.abs(sc.pos[1] - restY)).toBeLessThan(0.03);
-        expect(sc.grounded).toBe(true);
-        expect(length(sc.realizedVel)).toBeLessThan(1e-3);
-    },
-);
+test("CPU character sweep settles on the floor", () => {
+    const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 3, 0])));
+    const ss = [sweepBody(ground([0, 0, 0]))];
+    for (let f = 0; f < 200; f++) sweepCharacter(sc, [0, 0, 0], ss, G, DT);
+    console.log(
+        `[char-sweep] drop-to-rest y ${sc.pos[1].toFixed(4)} (rest ${restY}), grounded ${sc.grounded}`,
+    );
+    expect(Math.abs(sc.pos[1] - restY)).toBeLessThan(0.03);
+    expect(sc.grounded).toBe(true);
+    expect(length(sc.realizedVel)).toBeLessThan(1e-3);
+}, 250);
 
-check(
-    "slope: 30° holds (walkable), 60° slides (too steep)",
-    {
-        claim: "CPU character sweep separates walkable and steep slopes",
-    },
-    () => {
-        const slide = (deg: number): number => {
-            const a = (deg * Math.PI) / 180;
-            const n: Vec3 = [-Math.sin(a), Math.cos(a), 0];
-            const top: Vec3 = [n[0] * (0.5 + REST_OFFSET), 5 + n[1] * (0.5 + REST_OFFSET) + 1.5, 0];
-            const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, top), MAX_SLOPE));
-            const ss = [sweepBody(ground([0, 5, 0], qz(a)))];
-            for (let f = 0; f < 60; f++) sweepCharacter(sc, [0, 0, 0], ss, G, DT); // land + settle
-            const landed: Vec3 = [...sc.pos] as Vec3;
-            for (let f = 0; f < 90; f++) sweepCharacter(sc, [0, 0, 0], ss, G, DT); // measure window
-            return length(sub(sc.pos, landed));
-        };
-        const shallow = slide(30);
-        const steep = slide(60);
-        console.log(
-            `[char-sweep] slope — 30° ${shallow.toFixed(3)} m (holds), 60° ${steep.toFixed(3)} m (slides)`,
-        );
-        expect(shallow).toBeLessThan(0.1);
-        expect(steep).toBeGreaterThan(1.0);
-        expect(steep).toBeGreaterThan(shallow * 10);
-    },
-);
+test("CPU character sweep separates walkable and steep slopes", () => {
+    const slide = (deg: number): number => {
+        const a = (deg * Math.PI) / 180;
+        const n: Vec3 = [-Math.sin(a), Math.cos(a), 0];
+        const top: Vec3 = [n[0] * (0.5 + REST_OFFSET), 5 + n[1] * (0.5 + REST_OFFSET) + 1.5, 0];
+        const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, top), MAX_SLOPE));
+        const ss = [sweepBody(ground([0, 5, 0], qz(a)))];
+        for (let f = 0; f < 60; f++) sweepCharacter(sc, [0, 0, 0], ss, G, DT); // land + settle
+        const landed: Vec3 = [...sc.pos] as Vec3;
+        for (let f = 0; f < 90; f++) sweepCharacter(sc, [0, 0, 0], ss, G, DT); // measure window
+        return length(sub(sc.pos, landed));
+    };
+    const shallow = slide(30);
+    const steep = slide(60);
+    console.log(
+        `[char-sweep] slope — 30° ${shallow.toFixed(3)} m (holds), 60° ${steep.toFixed(3)} m (slides)`,
+    );
+    expect(shallow).toBeLessThan(0.1);
+    expect(steep).toBeGreaterThan(1.0);
+    expect(steep).toBeGreaterThan(shallow * 10);
+}, 250);
 
-check(
-    "step-up climbs a sub-radius step; a tall wall stops the char (bounded, no jitter)",
-    {
-        claim: "CPU character sweep climbs steps and stops at walls",
-    },
-    () => {
-        // step-up onto the plateau (near face x = 3)
-        const climber = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0])));
-        const stepStatics = [
-            sweepBody(ground([0, 0, 0])),
-            sweepBody(body([40, 0.7, 4], 0, 0.8, [23, 0.35, 0])),
-        ];
-        for (let f = 0; f < 200; f++) sweepCharacter(climber, [2, 0, 0], stepStatics, G, DT);
-        const stepTopY = 0.7 + REST_OFFSET; // 1.5 on the plateau
-        console.log(
-            `[char-sweep] step-up — pos ${climber.pos.map((v) => v.toFixed(2)).join(",")} (top ~${stepTopY})`,
-        );
-        expect(climber.pos[0]).toBeGreaterThan(4); // climbed + kept walking onto the plateau
-        expect(Math.abs(climber.pos[1] - stepTopY)).toBeLessThan(0.06);
+test("CPU character sweep climbs steps and stops at walls", () => {
+    // step-up onto the plateau (near face x = 3)
+    const climber = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0])));
+    const stepStatics = [
+        sweepBody(ground([0, 0, 0])),
+        sweepBody(body([40, 0.7, 4], 0, 0.8, [23, 0.35, 0])),
+    ];
+    for (let f = 0; f < 200; f++) sweepCharacter(climber, [2, 0, 0], stepStatics, G, DT);
+    const stepTopY = 0.7 + REST_OFFSET; // 1.5 on the plateau
+    console.log(
+        `[char-sweep] step-up — pos ${climber.pos.map((v) => v.toFixed(2)).join(",")} (top ~${stepTopY})`,
+    );
+    expect(climber.pos[0]).toBeGreaterThan(4); // climbed + kept walking onto the plateau
+    expect(Math.abs(climber.pos[1] - stepTopY)).toBeLessThan(0.06);
 
-        // tall wall (near face x = 2) — pushed back, bounded, no jitter
-        const blocked = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0])));
-        const wallStatics = [
-            sweepBody(ground([0, 0, 0])),
-            sweepBody(body([2, 8, 2], 0, 0.8, [3, 4, 0])),
-        ];
-        let minX = Infinity;
-        let maxX = -Infinity;
-        for (let f = 0; f < 200; f++) {
-            sweepCharacter(blocked, [2, 0, 0], wallStatics, G, DT);
-            if (f >= 150) {
-                minX = Math.min(minX, blocked.pos[0]);
-                maxX = Math.max(maxX, blocked.pos[0]);
-            }
+    // tall wall (near face x = 2) — pushed back, bounded, no jitter
+    const blocked = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0])));
+    const wallStatics = [
+        sweepBody(ground([0, 0, 0])),
+        sweepBody(body([2, 8, 2], 0, 0.8, [3, 4, 0])),
+    ];
+    let minX = Infinity;
+    let maxX = -Infinity;
+    for (let f = 0; f < 200; f++) {
+        sweepCharacter(blocked, [2, 0, 0], wallStatics, G, DT);
+        if (f >= 150) {
+            minX = Math.min(minX, blocked.pos[0]);
+            maxX = Math.max(maxX, blocked.pos[0]);
         }
-        console.log(
-            `[char-sweep] wall-stop — final x ${blocked.pos[0].toFixed(3)} (surface ~${2 - RADIUS}), drift ${(maxX - minX).toExponential(2)}`,
-        );
-        expect(blocked.pos[0]).toBeLessThan(2); // never tunnels past the wall face
-        expect(blocked.pos[0]).toBeGreaterThan(2 - RADIUS - 0.1); // stops at the surface
-        expect(maxX - minX).toBeLessThan(1e-3); // no jitter
-        expect(Math.abs(blocked.pos[1] - restY)).toBeLessThan(0.05); // still on the floor (didn't climb)
-    },
-);
+    }
+    console.log(
+        `[char-sweep] wall-stop — final x ${blocked.pos[0].toFixed(3)} (surface ~${2 - RADIUS}), drift ${(maxX - minX).toExponential(2)}`,
+    );
+    expect(blocked.pos[0]).toBeLessThan(2); // never tunnels past the wall face
+    expect(blocked.pos[0]).toBeGreaterThan(2 - RADIUS - 0.1); // stops at the surface
+    expect(maxX - minX).toBeLessThan(1e-3); // no jitter
+    expect(Math.abs(blocked.pos[1] - restY)).toBeLessThan(0.05); // still on the floor (didn't climb)
+}, 250);
 
-check(
-    "jump: spam → single jump per landing, bounded apex (no double-jump)",
-    { claim: "CPU character sweep bounds repeated jump input" },
-    () => {
-        const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0]), 50, JUMP));
-        const ss = [sweepBody(ground([0, 0, 0]))];
-        let maxY = Number.NEGATIVE_INFINITY;
-        let jumps = 0;
-        for (let f = 0; f < 300; f++) {
-            sweepCharacter(sc, [0, 0, 0], ss, G, DT, true); // jump held every frame
-            maxY = Math.max(maxY, sc.pos[1]);
-            if (sc.vel[1] === JUMP) jumps++; // a launch frame sets vel.y exactly to jumpSpeed
-        }
-        const apex = restY + (JUMP * JUMP) / (2 * Math.abs(G)); // 2.55
-        console.log(
-            `[char-sweep] spam-jump — ${jumps} jumps/300f, maxY ${maxY.toFixed(3)} (apex ${apex.toFixed(2)})`,
-        );
-        expect(jumps).toBeGreaterThan(1); // jumped repeatedly (on each landing)
-        expect(jumps).toBeLessThan(10); // NOT every frame — single jump per cycle
-        expect(maxY).toBeLessThan(apex + 0.4); // bounded near one jump's apex
-        expect(maxY).toBeGreaterThan(restY + 0.8); // clearly left the ground
-    },
-);
+test("CPU character sweep bounds repeated jump input", () => {
+    const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0]), 50, JUMP));
+    const ss = [sweepBody(ground([0, 0, 0]))];
+    let maxY = Number.NEGATIVE_INFINITY;
+    let jumps = 0;
+    for (let f = 0; f < 300; f++) {
+        sweepCharacter(sc, [0, 0, 0], ss, G, DT, true); // jump held every frame
+        maxY = Math.max(maxY, sc.pos[1]);
+        if (sc.vel[1] === JUMP) jumps++; // a launch frame sets vel.y exactly to jumpSpeed
+    }
+    const apex = restY + (JUMP * JUMP) / (2 * Math.abs(G)); // 2.55
+    console.log(
+        `[char-sweep] spam-jump — ${jumps} jumps/300f, maxY ${maxY.toFixed(3)} (apex ${apex.toFixed(2)})`,
+    );
+    expect(jumps).toBeGreaterThan(1); // jumped repeatedly (on each landing)
+    expect(jumps).toBeLessThan(10); // NOT every frame — single jump per cycle
+    expect(maxY).toBeLessThan(apex + 0.4); // bounded near one jump's apex
+    expect(maxY).toBeGreaterThan(restY + 0.8); // clearly left the ground
+}, 250);
 
-check(
-    "coyote: a jump pressed just after walking off a ledge still fires",
-    {
-        claim: "CPU character sweep preserves coyote jump timing",
-    },
-    () => {
-        const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0.5, restY, 0]), 50, JUMP));
-        const ss = [sweepBody(body([2, 1, 4], 0, 0.8, [0, 0, 0]))]; // platform x ∈ [-1, 1]
-        let leftAt = -1;
-        let coyoteJumped = false;
-        for (let f = 0; f < 120; f++) {
-            const wasGrounded = sc.grounded;
-            const press = leftAt >= 0 && f === leftAt + 1; // first airborne frame after the ledge
-            sweepCharacter(sc, [3, 0, 0], ss, G, DT, press);
-            if (wasGrounded && !sc.grounded && leftAt < 0) leftAt = f;
-            if (press && sc.vel[1] === JUMP) coyoteJumped = true;
-        }
-        console.log(`[char-sweep] coyote — left at frame ${leftAt}, coyote jump ${coyoteJumped}`);
-        expect(leftAt).toBeGreaterThan(0); // walked off the ledge (grounded lapsed)
-        expect(coyoteJumped).toBe(true); // the jump fired within the coyote window despite being airborne
-    },
-);
+test("CPU character sweep preserves coyote jump timing", () => {
+    const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0.5, restY, 0]), 50, JUMP));
+    const ss = [sweepBody(body([2, 1, 4], 0, 0.8, [0, 0, 0]))]; // platform x ∈ [-1, 1]
+    let leftAt = -1;
+    let coyoteJumped = false;
+    for (let f = 0; f < 120; f++) {
+        const wasGrounded = sc.grounded;
+        const press = leftAt >= 0 && f === leftAt + 1; // first airborne frame after the ledge
+        sweepCharacter(sc, [3, 0, 0], ss, G, DT, press);
+        if (wasGrounded && !sc.grounded && leftAt < 0) leftAt = f;
+        if (press && sc.vel[1] === JUMP) coyoteJumped = true;
+    }
+    console.log(`[char-sweep] coyote — left at frame ${leftAt}, coyote jump ${coyoteJumped}`);
+    expect(leftAt).toBeGreaterThan(0); // walked off the ledge (grounded lapsed)
+    expect(coyoteJumped).toBe(true); // the jump fired within the coyote window despite being airborne
+}, 250);
 
-check(
-    "buffer: a jump pressed just before landing fires on touchdown",
-    {
-        claim: "CPU character sweep preserves buffered touchdown jumps",
-    },
-    () => {
-        const sc = charState(
-            character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY + 0.4, 0]), 50, JUMP),
-        );
-        const ss = [sweepBody(ground([0, 0, 0]))];
-        let buffered = false;
-        let bufferJumped = false;
-        for (let f = 0; f < 120; f++) {
-            const press = !buffered && !sc.grounded && sc.vel[1] < 0 && sc.pos[1] < restY + 0.15;
-            if (press) buffered = true;
-            sweepCharacter(sc, [0, 0, 0], ss, G, DT, press);
-            if (buffered && sc.vel[1] === JUMP) bufferJumped = true;
-        }
-        console.log(
-            `[char-sweep] buffer — pressed-before-landing ${buffered}, fired ${bufferJumped}`,
-        );
-        expect(buffered).toBe(true); // the press happened while airborne + descending
-        expect(bufferJumped).toBe(true); // fired on/just after landing (the buffer carried it)
-    },
-);
+test("CPU character sweep preserves buffered touchdown jumps", () => {
+    const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY + 0.4, 0]), 50, JUMP));
+    const ss = [sweepBody(ground([0, 0, 0]))];
+    let buffered = false;
+    let bufferJumped = false;
+    for (let f = 0; f < 120; f++) {
+        const press = !buffered && !sc.grounded && sc.vel[1] < 0 && sc.pos[1] < restY + 0.15;
+        if (press) buffered = true;
+        sweepCharacter(sc, [0, 0, 0], ss, G, DT, press);
+        if (buffered && sc.vel[1] === JUMP) bufferJumped = true;
+    }
+    console.log(`[char-sweep] buffer — pressed-before-landing ${buffered}, fired ${bufferJumped}`);
+    expect(buffered).toBe(true); // the press happened while airborne + descending
+    expect(bufferJumped).toBe(true); // fired on/just after landing (the buffer carried it)
+}, 250);
 
 // ── gather: the sphere cull is a contact-set-preserving superset ───────────────────────────────────────
 
@@ -498,115 +456,101 @@ const divergence = (
     return max;
 };
 
-check(
-    "cull == brute, bit-exact, across the behavioral scene shapes",
+test("CPU character sweep cull matches brute behavioral scenes", () => {
+    const stepUp = divergence(
+        () => ({
+            sc: charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0]))),
+            ss: [
+                sweepBody(ground([0, 0, 0])),
+                sweepBody(body([40, 0.7, 4], 0, 0.8, [23, 0.35, 0])),
+                ...fillers(24, 30).map(sweepBody),
+            ],
+            sp: [],
+            input: [2, 0, 0] as Vec3,
+        }),
+        200,
+    );
+    const pushScene = divergence(
+        () => ({
+            sc: charState(character(capsule(HALF_H, RADIUS, 0, 0.5, [0, restY, 0]), 50, JUMP)),
+            ss: [sweepBody(ground([0, 0, 0])), ...fillers(24, 25).map(sweepBody)],
+            sp: [
+                sweepBody(body([0.8, 0.8, 0.8], massOf([0.8, 0.8, 0.8], 0.5), 0.3, [1.2, 0.9, 0])),
+            ],
+            input: [3, 0, 0] as Vec3,
+        }),
+        120,
+        30,
+    );
+    console.log(
+        `[char-sweep] cull divergence — step-up ${stepUp.toExponential(1)}, push ${pushScene.toExponential(1)}`,
+    );
+    expect(stepUp).toBe(0); // bit-identical — the cull never changes the contact set
+    expect(pushScene).toBe(0);
+}, 250);
+
+test("CPU character sweep reports gather cull overflow and guard", () => {
+    const diag = (): SweepDiag => ({ candidates: 0, overflow: false, guard: false });
+
+    // far ring fully culled — only the floor survives
     {
-        claim: "CPU character sweep cull matches brute behavioral scenes",
-    },
-    () => {
-        const stepUp = divergence(
-            () => ({
-                sc: charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0]))),
-                ss: [
-                    sweepBody(ground([0, 0, 0])),
-                    sweepBody(body([40, 0.7, 4], 0, 0.8, [23, 0.35, 0])),
-                    ...fillers(24, 30).map(sweepBody),
-                ],
-                sp: [],
-                input: [2, 0, 0] as Vec3,
-            }),
-            200,
+        const d = diag();
+        const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0])));
+        sweepCharacter(
+            sc,
+            [1, 0, 0],
+            [sweepBody(ground([0, 0, 0])), ...fillers(500, 30).map(sweepBody)],
+            G,
+            DT,
+            false,
+            [],
+            { diag: d },
         );
-        const pushScene = divergence(
-            () => ({
-                sc: charState(character(capsule(HALF_H, RADIUS, 0, 0.5, [0, restY, 0]), 50, JUMP)),
-                ss: [sweepBody(ground([0, 0, 0])), ...fillers(24, 25).map(sweepBody)],
-                sp: [
-                    sweepBody(
-                        body([0.8, 0.8, 0.8], massOf([0.8, 0.8, 0.8], 0.5), 0.3, [1.2, 0.9, 0]),
-                    ),
-                ],
-                input: [3, 0, 0] as Vec3,
-            }),
-            120,
-            30,
+        console.log(`[char-sweep] cull — candidates ${d.candidates} of 501`);
+        expect(d.candidates).toBe(1);
+        expect(d.overflow).toBe(false);
+    }
+
+    // > 64 near statics — overflow flagged loudly (keeps the first 64 in scan order)
+    {
+        const d = diag();
+        const near: Body[] = [];
+        for (let i = 0; i < 100; i++) {
+            const a = i * 2.4;
+            const r = (i % 10) * 0.12;
+            near.push(
+                body([0.2, 0.2, 0.2], 0, 0.8, [
+                    Math.cos(a) * r,
+                    0.6 + (i % 6) * 0.12,
+                    Math.sin(a) * r,
+                ]),
+            );
+        }
+        const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0])));
+        sweepCharacter(sc, [0.5, 0, 0], near.map(sweepBody), G, DT, false, [], { diag: d });
+        console.log(`[char-sweep] cull — overflow ${d.overflow}, candidates ${d.candidates}`);
+        expect(d.overflow).toBe(true);
+        expect(d.candidates).toBe(MAX_CHAR_CANDIDATES);
+    }
+
+    // spawn deep inside geometry — the displacement guard trips, the pose stays finite
+    {
+        const d = diag();
+        const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 0, 0])));
+        sweepCharacter(
+            sc,
+            [0, 0, 0],
+            [sweepBody(body([4, 4, 4], 0, 0.8, [0, 0, 0]))],
+            G,
+            DT,
+            false,
+            [],
+            { diag: d },
         );
         console.log(
-            `[char-sweep] cull divergence — step-up ${stepUp.toExponential(1)}, push ${pushScene.toExponential(1)}`,
+            `[char-sweep] guard — tripped ${d.guard}, pos ${sc.pos.map((v) => v.toFixed(2)).join(",")}`,
         );
-        expect(stepUp).toBe(0); // bit-identical — the cull never changes the contact set
-        expect(pushScene).toBe(0);
-    },
-);
-
-check(
-    "far bodies culled / overflow flagged / guard tripped",
-    {
-        claim: "CPU character sweep reports gather cull overflow and guard",
-    },
-    () => {
-        const diag = (): SweepDiag => ({ candidates: 0, overflow: false, guard: false });
-
-        // far ring fully culled — only the floor survives
-        {
-            const d = diag();
-            const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0])));
-            sweepCharacter(
-                sc,
-                [1, 0, 0],
-                [sweepBody(ground([0, 0, 0])), ...fillers(500, 30).map(sweepBody)],
-                G,
-                DT,
-                false,
-                [],
-                { diag: d },
-            );
-            console.log(`[char-sweep] cull — candidates ${d.candidates} of 501`);
-            expect(d.candidates).toBe(1);
-            expect(d.overflow).toBe(false);
-        }
-
-        // > 64 near statics — overflow flagged loudly (keeps the first 64 in scan order)
-        {
-            const d = diag();
-            const near: Body[] = [];
-            for (let i = 0; i < 100; i++) {
-                const a = i * 2.4;
-                const r = (i % 10) * 0.12;
-                near.push(
-                    body([0.2, 0.2, 0.2], 0, 0.8, [
-                        Math.cos(a) * r,
-                        0.6 + (i % 6) * 0.12,
-                        Math.sin(a) * r,
-                    ]),
-                );
-            }
-            const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, restY, 0])));
-            sweepCharacter(sc, [0.5, 0, 0], near.map(sweepBody), G, DT, false, [], { diag: d });
-            console.log(`[char-sweep] cull — overflow ${d.overflow}, candidates ${d.candidates}`);
-            expect(d.overflow).toBe(true);
-            expect(d.candidates).toBe(MAX_CHAR_CANDIDATES);
-        }
-
-        // spawn deep inside geometry — the displacement guard trips, the pose stays finite
-        {
-            const d = diag();
-            const sc = charState(character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 0, 0])));
-            sweepCharacter(
-                sc,
-                [0, 0, 0],
-                [sweepBody(body([4, 4, 4], 0, 0.8, [0, 0, 0]))],
-                G,
-                DT,
-                false,
-                [],
-                { diag: d },
-            );
-            console.log(
-                `[char-sweep] guard — tripped ${d.guard}, pos ${sc.pos.map((v) => v.toFixed(2)).join(",")}`,
-            );
-            expect(d.guard).toBe(true);
-            expect(sc.pos.every(Number.isFinite)).toBe(true);
-        }
-    },
-);
+        expect(d.guard).toBe(true);
+        expect(sc.pos.every(Number.isFinite)).toBe(true);
+    }
+}, 250);
