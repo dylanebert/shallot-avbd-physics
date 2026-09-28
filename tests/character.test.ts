@@ -443,41 +443,49 @@ test("character re-gather includes bodies reached by platform carry", () => {
 }, 250);
 
 test("character gather reports and preserves its bounded overflow policy", () => {
-    let seed = 7;
-    const rnd = () => {
-        seed = (seed * 1664525 + 1013904223) >>> 0;
-        return seed / 0xffffffff;
-    };
-    const mk = () => {
-        seed = 7;
-        const statics: Body[] = [];
-        for (let i = 0; i < 65; i++) {
-            const a = rnd() * Math.PI * 2;
-            const r = rnd() * 1.5;
-            statics.push(
-                body([0.2, 0.2, 0.2], 0, 0.8, [Math.cos(a) * r, 0.6 + rnd(), Math.sin(a) * r]),
-            );
-        }
-        return { ch: character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 1.3, 0])), statics };
-    };
+    const mk = () => ({
+        ch: character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 1.3, 0])),
+        // A narrow row along the path. With the sweep band's ~1.6 m horizontal reach, the cap
+        // window loses three bodies at the left and gains three at the right on tick 2.
+        statics: Array.from({ length: 90 }, (_, i) =>
+            body([0.05, 0.05, 0.05], 0, 0.8, [-1.625 + i / 24, 2.2, 0]),
+        ),
+    });
     const d = diag();
-    let div = 0;
     const a = mk();
     const b = mk();
-    // The minimum over-cap input (65 in-range statics) stays over the cap for two ticks.
-    // Compare every tick, so the cap policy is pinned across state updates, not just initial pose.
-    for (let tick = 0; tick < 2; tick++) {
-        moveCharacter(a.ch, [0.5, 0, 0], a.statics, G, DT, false, [], { diag: d });
+    let previous = new Set<Body>();
+    let changed = false;
+    let div = 0;
+    let secondTickDelta = { dropped: 0, added: 0 };
+
+    for (let tick = 0; tick < 4; tick++) {
+        moveCharacter(a.ch, [7.5, 0, 0], a.statics, G, DT, false, [], { diag: d });
         expect(d.overflow).toBe(true);
-        // The brute reference for the cap policy: the first 64 bodies, un-culled.
-        moveCharacter(b.ch, [0.5, 0, 0], b.statics.slice(0, 64), G, DT, false, [], {
-            cull: false,
-        });
+        const kept = d.kept ?? [];
+        const indices = Array.from({ length: 64 }, (_, index) => tick * 3 + index);
+        const expected = indices.map((index) => a.statics[index]);
+        expect(kept).toEqual(expected);
+        const current = new Set(expected);
+        if (tick > 0) {
+            const dropped = [...previous].filter((body) => !current.has(body));
+            const added = [...current].filter((body) => !previous.has(body));
+            changed ||= dropped.length > 0 && added.length > 0;
+            if (tick === 1) secondTickDelta = { dropped: dropped.length, added: added.length };
+        }
+
+        // Replay this tick's first 64 eligible bodies without culling, in scan order.
+        const reference = indices.map((index) => b.statics[index]);
+        moveCharacter(b.ch, [7.5, 0, 0], reference, G, DT, false, [], { cull: false });
         div = Math.max(div, length(sub(a.ch.body.posLin, b.ch.body.posLin)));
+        previous = current;
     }
+
     console.log(
-        `[character/cull] overflow — held for two ticks, divergence vs first-64 brute ${div.toExponential(1)}`,
+        `[character/cull] overflow — tick-2 set change ${secondTickDelta.dropped} dropped/${secondTickDelta.added} added, later changes ${changed}, max divergence ${div.toExponential(1)}`,
     );
+    expect(secondTickDelta).toEqual({ dropped: 3, added: 3 });
+    expect(changed).toBe(true);
     expect(div).toBe(0); // the cap policy IS "first 64 in scan order" — pinned so the GPU can mirror it
 }, 250);
 

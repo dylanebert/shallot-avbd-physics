@@ -77,11 +77,12 @@ export function character(body: Body, maxSlopeDeg = 50, jumpSpeed = 0): Characte
 
 const polyOf = (b: Body) => (b.shape === ShapeKind.Hull ? b.hull! : boxHull(b.size));
 
-/** per-tick cull diagnostics — the runtime CPU sweep's `SweepDiag` mirrors these */
+/** Per-tick cull diagnostics; the runtime sweep mirrors the counters, while `kept` is test-only. */
 export interface MoveDiag {
     candidates: number; // gathered candidate count (statics + push)
     overflow: boolean; // the set exceeded MAX_CHAR_CANDIDATES (first MAX kept, in scan order)
     guard: boolean; // displacement exceeded the gather band's budget (pathological depenetration)
+    kept?: Body[]; // tests-only references to the exact capped set, for verifying membership across ticks
 }
 
 /**
@@ -133,6 +134,7 @@ function gather(
     if (diag) {
         diag.candidates = s.length + p.length;
         diag.overflow ||= overflow;
+        diag.kept = [...s, ...p];
     }
     return { statics: s, push: p };
 }
@@ -237,6 +239,7 @@ export function moveCharacter(
         diag.candidates = statics.length + push.length;
         diag.overflow = false;
         diag.guard = false;
+        diag.kept = undefined;
     }
     const motionOf = (gv: Vec3) => Math.sqrt(lengthSq(add(ch.vel, gv))) * dt;
     let cand = cull
