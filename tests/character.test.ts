@@ -451,7 +451,7 @@ test("character gather reports and preserves its bounded overflow policy", () =>
     const mk = () => {
         seed = 7;
         const statics: Body[] = [];
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < 65; i++) {
             const a = rnd() * Math.PI * 2;
             const r = rnd() * 1.5;
             statics.push(
@@ -461,22 +461,18 @@ test("character gather reports and preserves its bounded overflow policy", () =>
         return { ch: character(capsule(HALF_H, RADIUS, 0, 0.8, [0, 1.3, 0])), statics };
     };
     const d = diag();
-    let overflowed = false;
     let div = 0;
     const a = mk();
     const b = mk();
-    // "culled(100) == brute(first 64)" pins the cap policy, and only holds while every body is in
-    // range (the cap active each tick) — the depenetration ejects the char from the cluster after a
-    // few ticks, so compare until the overflow lapses, not a fixed window.
-    for (let f = 0; f < 30; f++) {
-        moveCharacter(a.ch, [0.5, 0, 0], a.statics, G, DT, false, [], { diag: d });
-        if (!d.overflow) break;
-        overflowed = true;
-        // the brute reference for the cap policy: the first 64 bodies, un-culled
+    // The minimum over-cap input (65 in-range statics) is enough to pin the cap policy in one tick.
+    moveCharacter(a.ch, [0.5, 0, 0], a.statics, G, DT, false, [], { diag: d });
+    const overflowed = d.overflow;
+    if (overflowed) {
+        // The brute reference for the cap policy: the first 64 bodies, un-culled.
         moveCharacter(b.ch, [0.5, 0, 0], b.statics.slice(0, 64), G, DT, false, [], {
             cull: false,
         });
-        div = Math.max(div, length(sub(a.ch.body.posLin, b.ch.body.posLin)));
+        div = length(sub(a.ch.body.posLin, b.ch.body.posLin));
     }
     console.log(
         `[character/cull] overflow — flagged ${overflowed}, divergence vs first-64 brute ${div.toExponential(1)}`,

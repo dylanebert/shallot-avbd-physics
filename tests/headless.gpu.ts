@@ -116,7 +116,7 @@ test("gpu headless avbdplugin builds, steps, and probes finite body poses at cap
     // authored start — a band derived from free-fall kinematics, never from the observed value.
     // The floor is the same derivation's other side, on the discrete scheme the solver actually
     // runs: symplectic Euler (velocity first, then position), whose closed form the oracle pins as
-    // x_n = x0 + g·h²·n(n+1)/2 per integrated tick (tests/oracle.test.ts). The seeding
+    // x_n = x0 + g·h²·n(n+1)/2 per integrated tick (tests/oracle.oracle.ts). The seeding
     // precondition is what fixes n: the first tick's draw-group pack seeds the box's slot (authored
     // pose, velocity zeroed) and lands no observable integration, so TICKS − 1 = 4 ticks integrate
     // — five ticks of free fall cover Δy = g·h²·n(n+1)/2 at g = 10, h = 1/60, n = 4 ≈ 0.0278 m

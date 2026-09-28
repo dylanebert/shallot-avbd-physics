@@ -138,7 +138,7 @@ export function joint(
     // when a is null), so those world points must START coincident. A gross initial mismatch makes the rigid
     // constraint recover spurious velocity through BDF1 (v = Δx/dt) as it corrects — energy injected, the chain
     // explodes. The bound is geometric: anchors farther apart than the bodies' combined reach (radiusA +
-    // radiusB) can't be pinned without a violent correction → a construction error. Measured (oracle.test.ts):
+    // radiusB) can't be pinned without a violent correction → a construction error. Measured (oracle.oracle.ts):
     // a 4.2 m mismatch injects +34% energy + 6.6 m/s; a ≤ 0.1 m offset is absorbed cleanly. Construct at a pose
     // where the anchors meet. NOTE: the GPU joint-authoring API (Phase 6.2 GPU) must carry this same guard.
     const pA = a ? transform(a.posLin, a.posAng, rA) : rA;

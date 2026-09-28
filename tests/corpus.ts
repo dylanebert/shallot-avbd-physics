@@ -7,7 +7,7 @@
 // oracle tier's per-frame invariant).
 //
 // The scene builders + the band evaluator are shared so the band is one source of truth: the
-// oracle test (corpus.test.ts) runs each through the f64 CPU solver — the reference for what
+// oracle test (corpus.oracle.ts) runs each through the f64 CPU solver — the reference for what
 // "stable" looks like — and the gym `pile` scenario runs the same scenes on
 // the real GPU and checks the same band. A scene that wobbles on the GPU where the oracle is
 // steady is a GPU bug (avbd.md "the oracle is not the suspect"). Test scaffolding; f64.
@@ -120,7 +120,7 @@ export const CORPUS: Scene[] = [
 
 // the derived statistical band — bounds set an order off the oracle's measured steady behavior,
 // loose enough to clear the f32 GPU's round-off, tight enough that a wobble/blow-up trips them.
-// `BAND_*` is the one source of truth for the deterministic all-six oracle gate (corpus.test.ts).
+// `BAND_*` is the one source of truth for the deterministic all-six oracle gate (corpus.oracle.ts).
 export const BAND_SETTLE = 0.05; // m/s — < ⅓ of g·dt (0.167); oracle settles ≤ 0.017
 export const BAND_ENERGY_EXCESS = 1e-2; // E never exceeds E0 (the drop supremum); oracle ≤ 0 (dissipative)
 export const BAND_PENETRATION = 0.1; // m — settled overlap; margin+mg/k rest ~0.02, broken overlap ~0.5
@@ -151,7 +151,7 @@ export const toBand = (b: Body): BandBody => ({
 });
 
 /** total mechanical energy (KE_lin + KE_ang + PE) in the solver's world-frame-diagonal-inertia
- *  convention — matches oracle.test.ts `energy`. A dropped-from-rest scene's E(0) is the supremum;
+ *  convention — matches oracle.oracle.ts `energy`. A dropped-from-rest scene's E(0) is the supremum;
  *  a dissipative implicit solver only loses energy, so E(t) > E(0) is an injection (instability). */
 export function energy(bodies: BandBody[], gravity: number): number {
     let E = 0;
