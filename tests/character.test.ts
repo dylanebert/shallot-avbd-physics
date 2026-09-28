@@ -464,20 +464,20 @@ test("character gather reports and preserves its bounded overflow policy", () =>
     let div = 0;
     const a = mk();
     const b = mk();
-    // The minimum over-cap input (65 in-range statics) is enough to pin the cap policy in one tick.
-    moveCharacter(a.ch, [0.5, 0, 0], a.statics, G, DT, false, [], { diag: d });
-    const overflowed = d.overflow;
-    if (overflowed) {
+    // The minimum over-cap input (65 in-range statics) stays over the cap for two ticks.
+    // Compare every tick, so the cap policy is pinned across state updates, not just initial pose.
+    for (let tick = 0; tick < 2; tick++) {
+        moveCharacter(a.ch, [0.5, 0, 0], a.statics, G, DT, false, [], { diag: d });
+        expect(d.overflow).toBe(true);
         // The brute reference for the cap policy: the first 64 bodies, un-culled.
         moveCharacter(b.ch, [0.5, 0, 0], b.statics.slice(0, 64), G, DT, false, [], {
             cull: false,
         });
-        div = length(sub(a.ch.body.posLin, b.ch.body.posLin));
+        div = Math.max(div, length(sub(a.ch.body.posLin, b.ch.body.posLin)));
     }
     console.log(
-        `[character/cull] overflow — flagged ${overflowed}, divergence vs first-64 brute ${div.toExponential(1)}`,
+        `[character/cull] overflow — held for two ticks, divergence vs first-64 brute ${div.toExponential(1)}`,
     );
-    expect(overflowed).toBe(true);
     expect(div).toBe(0); // the cap policy IS "first 64 in scan order" — pinned so the GPU can mirror it
 }, 250);
 
