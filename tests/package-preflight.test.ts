@@ -1,5 +1,5 @@
 import { test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 
@@ -42,10 +42,10 @@ test("packed AVBD identity and public boundary work in a scratch consumer", () =
     const lock = readFileSync(resolve(root, "bun.lock"), "utf8");
     const devDependencies = manifest.devDependencies as Record<string, unknown>;
     const shallotDependency = devDependencies["@dylanebert/shallot"];
-    if (shallotDependency !== "^0.10.0-next.1") {
+    if (shallotDependency !== "^0.10.0-next.2") {
         throw new Error("package.json does not carry the published Shallot prerelease pin");
     }
-    if (!lock.includes('"@dylanebert/shallot": "^0.10.0-next.1"')) {
+    if (!lock.includes('"@dylanebert/shallot": "^0.10.0-next.2"')) {
         throw new Error("bun.lock does not resolve the declared Shallot dependency");
     }
 
@@ -60,6 +60,13 @@ test("packed AVBD identity and public boundary work in a scratch consumer", () =
             .find((line) => line.endsWith(".tgz"));
         if (artifactName === undefined) throw new Error("bun pm pack did not report an artifact");
         const artifact = resolve(packDir, artifactName);
+        let shallotSpecifier = "^0.10.0-next.2";
+        const packedShallot = process.env.SHALLOT_PACKED_TARBALL;
+        if (packedShallot) {
+            const copy = join(scratchDir, "shallot-packed.tgz");
+            copyFileSync(resolve(packedShallot), copy);
+            shallotSpecifier = `file:${relative(scratchDir, copy)}`;
+        }
         const archive = runChecked(["tar", "-tzf", artifact], root).stdout;
         for (const entry of [
             "package/package.json",
@@ -89,7 +96,7 @@ test("packed AVBD identity and public boundary work in a scratch consumer", () =
                     packageManager: "bun@1.4.2",
                     dependencies: {
                         "@dylanebert/shallot-avbd-physics": `file:${relative(scratchDir, artifact)}`,
-                        "@dylanebert/shallot": "^0.10.0-next.1",
+                        "@dylanebert/shallot": shallotSpecifier,
                         typegpu: "~0.12.6",
                     },
                 },
@@ -114,7 +121,7 @@ if (typeof AvbdPlugin !== "object" || typeof CoreAvbd !== "object" || MAX_CONTAC
   throw new Error("public AVBD exports are not usable");
 if (avbd.name !== "@dylanebert/shallot-avbd-physics")
   throw new Error("installed AVBD package has the wrong identity");
-if (shallot.version !== "0.10.0-next.1") throw new Error("installed Shallot has the wrong version");
+if (shallot.version !== "0.10.0-next.2") throw new Error("installed Shallot has the wrong version");
 if (Object.keys(shallot.exports).some((name) => name.includes("harness")))
   throw new Error("installed Shallot exposes retired harness support");
 const shallotPath = realpathSync(resolve(import.meta.dir, "node_modules/@dylanebert/shallot"));

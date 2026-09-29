@@ -34,9 +34,10 @@ const TICKS = 5;
 
 /** the AVBD solver-owned pose of one body, read through Shallot's public `probeBuffer` seam. */
 async function probeAvbdPose(
+    state: State,
     eid: number,
 ): Promise<{ pos: number[]; quat: number[]; vel: number[] }> {
-    const step = Avbd.step;
+    const step = Avbd.step(state);
     const device = Compute.device;
     if (!step || !device) throw new Error("physics step or device missing after build");
     // the 32-byte read below assumes the quat column directly follows the pos column — guard the
@@ -101,8 +102,8 @@ test("gpu headless avbdplugin builds, steps, and probes finite body poses at cap
                 <a body="pos: 0 6 0; half-extents: 0.6 0.6 0.6; mass: 1" />
             </scene>`,
     });
-    expect(Avbd.step).not.toBeNull();
-    expect(Avbd.step!.eidCap).toBe(CAPACITY);
+    expect(Avbd.step(app.state)).not.toBeNull();
+    expect(Avbd.step(app.state)!.eidCap).toBe(CAPACITY);
     // the falling box is the scene's only mass > 0 body; the ground is static.
     const box = [...app.state.query([Body])].find((eid) => Body.mass.get(eid) > 0);
     expect(box).toBeDefined();
@@ -110,7 +111,7 @@ test("gpu headless avbdplugin builds, steps, and probes finite body poses at cap
     // pack seeds the box's slot, later ticks integrate it — and 4.9 m above contact is far outside
     // the 0.04 speculative band, so every tick is closed-form free fall.
     for (let i = 0; i < TICKS; i++) app.state.step();
-    const pose = await probeAvbdPose(box!);
+    const pose = await probeAvbdPose(app.state, box!);
     expectFinite(pose);
     // closed-form gravity direction: after solved free-fall ticks the box sits strictly below its
     // authored start — a band derived from free-fall kinematics, never from the observed value.
@@ -128,6 +129,44 @@ test("gpu headless avbdplugin builds, steps, and probes finite body poses at cap
     expect(pose.pos[1]).toBeLessThan(6);
     expect(pose.pos[1]).toBeGreaterThan(5.9);
     app.dispose();
+}, 20_000);
+
+test("two live AVBD States keep their solver buffers separate when sharing a device", async () => {
+    await setupGpuPeer();
+    const scene = `<scene>
+        <a body="pos: 0 0 0; half-extents: 10 0.5 10; mass: 0" />
+        <a body="pos: 0 6 0; half-extents: 0.6 0.6 0.6; mass: 1" />
+    </scene>`;
+    const first = await build({
+        plugins: [SlabPlugin, MirrorPlugin, AvbdPlugin],
+        defaults: false,
+        capacity: 128,
+        scene,
+    });
+    let second: Awaited<ReturnType<typeof build>> | undefined;
+    try {
+        const firstStep = Avbd.step(first.state);
+        if (!firstStep) throw new Error("first AVBD State did not warm");
+        second = await build({
+            plugins: [SlabPlugin, MirrorPlugin, AvbdPlugin],
+            defaults: false,
+            capacity: 128,
+            device: first.state.gpu.device,
+            scene,
+        });
+        const secondStep = Avbd.step(second.state);
+        if (!secondStep) throw new Error("second AVBD State did not warm");
+        expect(secondStep).not.toBe(firstStep);
+        expect(secondStep.bodies).not.toBe(firstStep.bodies);
+        first.dispose();
+        for (let tick = 0; tick < TICKS; tick++) second.state.step();
+        const box = [...second.state.query([Body])].find((eid) => Body.mass.get(eid) > 0);
+        expect(box).toBeDefined();
+        expectFinite(await probeAvbdPose(second.state, box!));
+    } finally {
+        second?.dispose();
+        first.dispose();
+    }
 }, 20_000);
 
 test("gpu headless characterplugin sweeps headlessly at the same capacity", async () => {

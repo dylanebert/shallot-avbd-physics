@@ -50,7 +50,7 @@ import { B_POS, B_QUAT, B_VELL, type Inputs, PENALTY_MIN, PhysicsStep } from "./
 // GPU pose after spawn. `AvbdComposeSystem` scatters the live pose into the `transforms`
 // firehose (`compose` below), after the Transform compose and before the renderer reads geometry, so a
 // `Body`+`Part` renders at the physics-owned pose. A CPU consumer reads the live pose through
-// `Avbd.readBody` (pass it to the physics pick layer) or the raw `Avbd.step.bodies` escape hatch.
+// `Avbd.readBody(state, eid)` (pass it to the physics pick layer) or the raw `Avbd.step(state)?.bodies` escape hatch.
 
 const GRAVITY = -10;
 const ALPHA = 0.99;
@@ -59,7 +59,7 @@ const ALPHA = 0.99;
 // a resting box to ~mg/k.
 const BETA_LIN = 1e4;
 // the joint angular penalty-ramp rate (Phase 6.2) — the canonical AVBD value; contacts
-// ignore it, so it only matters once a scene authors joints (via Avbd.step.setJoints).
+// ignore it, so it only matters once a scene authors joints (via Avbd.step(state)?.setJoints).
 const BETA_ANG = 100;
 const GAMMA = 0.999;
 // solve iterations — a perf/robustness tradeoff knob, NOT a correctness gate: every fixed count explodes
@@ -68,7 +68,7 @@ const GAMMA = 0.999;
 // showcase wall) where 4 (the paper's count) under-converges and pancakes during the settle, ~1ms@1k on
 // lovelace (0.996ms measured, vs 0.575 at 4). The f64 oracle + GPU gates VALIDATE at iters=10
 // (corpus.oracle.ts, the gym seeded gates), where the math is proven correct independent of this ship
-// value. Raise per-scene via `Avbd.step.configure` for a known-harder pile. physics.md "f32 precision"
+// value. Raise per-scene through that State's `Avbd.step(state)?.configure` for a known-harder pile. physics.md "f32 precision"
 // / "iters is a free knob".
 const ITERATIONS = 6;
 // The eid-space and dispatch bound is the owning State.capacity at warm (slot 0 is the never-minted
@@ -78,55 +78,64 @@ const ITERATIONS = 6;
 // webphysics both cap at 8; the convergence probe found realistic piles color in ≤4, well under it.
 const MAX_COLORS = 8;
 
-/** the running AVBD state: custom tooling + the gym read the GPU pose from `step.bodies` (indexed by
- *  `step.eids`), tune the solver via `step.configure`, or author joints imperatively via `step.setJoints`.
- *  `readBody` serves a frame-stale Mirror snapshot of a body's pose (1-2 fixed ticks behind). */
-export const Avbd: {
+interface AvbdWorld {
     step: PhysicsStep | null;
-    readBody(eid: number): BodyState | null;
+    colorMirror: Mirror | null;
+    bodyMirror: Mirror | null;
+    cachedBuf: ArrayBuffer | null;
+    cachedView: Float32Array | null;
+    stamps: Map<number, number>;
+    lastHullCount: number;
+    springSig: number;
+    jointSig: number;
+}
+
+const avbdWorldKey = Symbol("shallot-avbd.world");
+
+function createAvbdWorld(): AvbdWorld {
+    return {
+        step: null,
+        colorMirror: null,
+        bodyMirror: null,
+        cachedBuf: null,
+        cachedView: null,
+        stamps: new Map(),
+        lastHullCount: -1,
+        springSig: 0,
+        jointSig: 0,
+    };
+}
+
+function avbdWorld(state: State): AvbdWorld {
+    return state.resource(avbdWorldKey, createAvbdWorld);
+}
+
+/** the AVBD state owned by one State. The raw step handle, readback and pose cache are never shared across Apps. */
+export const Avbd = {
+    step(state: State): PhysicsStep | null {
+        return avbdWorld(state).step;
+    },
+    readBody(state: State, eid: number): BodyState | null {
+        return readBody(state, eid);
+    },
     setKinematic(
+        state: State,
         eid: number,
         pos: readonly [number, number, number],
         quat: readonly [number, number, number, number],
         teleport?: boolean,
         vel?: readonly [number, number, number],
-    ): void;
-    setVelocity(eid: number, vx: number, vy: number, vz: number): void;
-    readonly gravity: number;
-    readonly dt: number;
-} = {
-    step: null,
-    readBody: (eid) => readBody(eid),
-    setKinematic(eid, pos, quat, teleport, vel) {
-        Avbd.step?.setKinematic(eid, pos, quat, teleport, vel);
+    ): void {
+        avbdWorld(state).step?.setKinematic(eid, pos, quat, teleport, vel);
     },
-    setVelocity(eid, vx, vy, vz) {
-        Avbd.step?.setVelocity(eid, vx, vy, vz);
+    setVelocity(state: State, eid: number, vx: number, vy: number, vz: number): void {
+        avbdWorld(state).step?.setVelocity(eid, vx, vy, vz);
     },
-    get gravity() {
-        return Avbd.step?.gravity ?? 0;
-    },
-    get dt() {
-        return Avbd.step?.dt ?? 0;
-    },
+    gravity: GRAVITY,
+    dt: Time.FIXED_DT,
 };
 
-// the frame-stale readback of `step.colorCount` — word 0 the greedy's used-color count (the readback-bounded
-// color loop, Phase 4.9 Lever 1), word 1 the clamped live body count (the color loop's direct dispatch,
-// rung 0). Mirror is the sanctioned GPU→CPU readback; StepSystem's step() reads the snapshot each fixed
-// tick and bounds the primal's color count + dispatch size. MirrorSystem (draw, last) flushes it after
-// PackSystem wrote word 1, so the snapshot step() reads is from a prior frame — exactly the frame-stale
-// input both bounds want. Allocated in warm (after Mirror.reset), released in dispose.
-let colorMirror: Mirror | null = null;
-
-// the create-stamp each Body eid was last packed at, the state diffStamps diffs against to catch a
-// same-update realias the GPU pack's non-member seed reset misses (recycle.ts). Reset in warm/dispose.
-const stamps = new Map<number, number>();
-
-// the `Hulls` registry size at the last hull upload — the GPU `hullData` buffer is re-packed + re-uploaded
-// (step.setHulls) only when it changes (hulls are static once registered). Reset in warm so a fresh step
-// re-uploads the (persistent module-singleton) registry. A size check suffices: hulls aren't mutated in place.
-let lastHullCount = -1;
+// the frame-stale color-count readback, create-stamp diff and hull-upload stamp live in each AvbdWorld.
 
 // the membership + authored slab sources the GPU pack gathers from — all stable, fixed-capacity
 // buffers: the Body slab `.gpu` (allocated at SlabPlugin.warm) and the `membership` mirror (the
@@ -155,17 +164,18 @@ const PackSystem: System = {
     name: "pack",
     group: "draw",
     update(state: State) {
-        const step = Avbd.step;
+        const world = avbdWorld(state);
+        const step = world.step;
         if (!step || !Compute.device) return;
         // the CPU pre-pack stamp diff: force a re-seed on every eid recycled to a new body since the last
         // pack (a same-update destroy+create the GPU pack's non-member seed reset can't see, diffStamps).
-        for (const eid of diffStamps(state.query([Body]), (e) => state.stamp(e), stamps)) {
+        for (const eid of diffStamps(state.query([Body]), (e) => state.stamp(e), world.stamps)) {
             step.reseed(eid);
         }
         // upload the convex-hull geometry the collide pass reads (ShapeKind.Hull bodies) when the registry
         // changed — before the pack seeds a hull body's slot, so its first solve frame reads valid geometry.
-        if (Hulls.size !== lastHullCount) {
-            lastHullCount = Hulls.size;
+        if (Hulls.size !== world.lastHullCount) {
+            world.lastHullCount = Hulls.size;
             step.setHulls(packHulls());
         }
         const encoder = Compute.device.createCommandEncoder({ label: "physics-pack" });
@@ -177,25 +187,19 @@ const PackSystem: System = {
 // the bodies SoA columns `readBody` reads off the Mirror snapshot — imported from step.ts so the
 // column indices can't drift from the solver's own layout
 
-// the ONE body-pose Mirror `readBody` reads through, shared by every CPU consumer (the character sweep,
-// pick.ts). Lazily allocated once `Avbd.step` exists (after warm + Mirror.reset).
-let bodyMirror: Mirror | null = null;
-// a cached view over the Mirror's reused snapshot buffer (physics.md: `snapshot.bytes` is the SAME
-// ArrayBuffer object across readbacks), so `readBody` doesn't re-wrap a Float32Array every call.
-let cachedBuf: ArrayBuffer | null = null;
-let cachedView: Float32Array | null = null;
-
-function readBody(eid: number): BodyState | null {
-    const s = Avbd.step;
+// the State-owned body-pose Mirror and cached view over its reused snapshot buffer (`snapshot.bytes` is the
+// same ArrayBuffer across readbacks), so `readBody` does not re-wrap a Float32Array on every call.
+function readBody(state: State, eid: number): BodyState | null {
+    const world = avbdWorld(state);
+    const s = world.step;
     if (!s) return null;
-    if (!bodyMirror) bodyMirror = mirror(s.bodies);
-    const snap = bodyMirror.snapshot;
+    const snap = world.bodyMirror?.snapshot;
     if (!snap) return null;
-    if (cachedBuf !== snap.bytes) {
-        cachedBuf = snap.bytes;
-        cachedView = new Float32Array(snap.bytes);
+    if (world.cachedBuf !== snap.bytes) {
+        world.cachedBuf = snap.bytes;
+        world.cachedView = new Float32Array(snap.bytes);
     }
-    const f = cachedView as Float32Array;
+    const f = world.cachedView as Float32Array;
     const cap = s.eidCap;
     const po = (B_POS * cap + eid) * 4;
     const qo = (B_QUAT * cap + eid) * 4;
@@ -210,16 +214,17 @@ function readBody(eid: number): BodyState | null {
 const AvbdStepSystem: System = {
     name: "avbd-step",
     group: "fixed",
-    update() {
-        const s = Avbd.step;
+    update(state) {
+        const world = avbdWorld(state);
+        const s = world.step;
         if (!s || !Compute.device) return;
         // readback-bounded color loop (Phase 4.9 Lever 1) + direct color-loop dispatch (rung 0): bound the
         // primal's dispatched color count to the frame-stale used-color count and size the color loop's
         // direct dispatch off the frame-stale live count, both riding one snapshot ([0] = usedColors from
         // colorize, [1] = liveCount from packScan). No snapshot yet (first frames) → both keep the full
         // cap (the safe cold-start).
-        if (colorMirror?.snapshot) {
-            const counts = new Uint32Array(colorMirror.snapshot.bytes);
+        if (world.colorMirror?.snapshot) {
+            const counts = new Uint32Array(world.colorMirror.snapshot.bytes);
             s.boundColors(counts[0]);
             s.boundBodies(counts[1]);
         }
@@ -231,24 +236,22 @@ const AvbdStepSystem: System = {
 
 // the authored-constraint upload over the physics/core seam: re-derive the defs only when the authored
 // signature changes. Reset in warm so a fresh step receives the authored set on its first frame.
-let springSig = 0;
-let jointSig = 0;
-
 const AvbdConstraintSystem: System = {
     name: "avbd-constraints",
     group: "fixed",
     before: [AvbdStepSystem],
     update(state) {
-        const s = Avbd.step;
+        const world = avbdWorld(state);
+        const s = world.step;
         if (!s) return;
         const ss = springSignature(state);
-        if (ss !== springSig) {
-            springSig = ss;
+        if (ss !== world.springSig) {
+            world.springSig = ss;
             s.setSprings(springDefs(state));
         }
         const js = jointSignature(state);
-        if (js !== jointSig) {
-            jointSig = js;
+        if (js !== world.jointSig) {
+            world.jointSig = js;
             s.setJoints(jointDefs(state));
         }
     },
@@ -260,10 +263,11 @@ const AvbdComposeSystem: System = {
     after: [BeginFrameSystem],
     before: [PrepassSystem],
     update(state) {
-        if (!Avbd.step || !Render.encoder) return;
+        const step = avbdWorld(state).step;
+        if (!step || !Render.encoder) return;
         const transforms = Compute.buffers.get("transforms");
         if (!transforms) return;
-        Avbd.step.compose(Render.encoder, transforms, state.time.fixedAlpha);
+        step.compose(Render.encoder, transforms, state.time.fixedAlpha);
     },
 };
 
@@ -293,28 +297,35 @@ export const AvbdPlugin: Plugin = {
         Joint: jointTraits,
     },
 
-    initialize() {
-        Avbd.step = null;
+    initialize(state) {
+        avbdWorld(state).step = null;
     },
 
     async warm(state: State) {
         if (!Compute.device) return;
-        lastHullCount = -1; // force a hull re-upload into the fresh step (the registry persists across states)
-        stamps.clear(); // a fresh step re-seeds every body; the stamp diff arms against the new step's slots
-        bodyMirror = null;
-        cachedBuf = null;
-        cachedView = null;
+        const world = avbdWorld(state);
+        world.step?.destroy();
+        world.colorMirror?.dispose();
+        world.bodyMirror?.dispose();
+        world.colorMirror = null;
+        world.bodyMirror = null;
+        world.lastHullCount = -1; // force a hull re-upload into the fresh step
+        world.stamps.clear(); // a fresh step re-seeds every body; the stamp diff arms against this step's slots
+        world.bodyMirror = null;
+        world.cachedBuf = null;
+        world.cachedView = null;
         // the membership gate templates the pack's per-eid skip test. `build` fixes every component's
         // bit up front, so `bit(Body)` is valid here; the State capacity is the eid range the pack walks.
         const { gen, mask } = state.membership.bit(Body);
-        Avbd.step = await PhysicsStep.create(Compute.device, state.capacity, state.capacity, {
+        world.step = await PhysicsStep.create(Compute.device, state.capacity, state.capacity, {
             gen,
             mask,
         });
+        world.bodyMirror = mirror(world.step.bodies);
         const transforms = Compute.buffers.get("transforms");
-        if (transforms) await Avbd.step.prepareCompose(transforms);
+        if (transforms) await world.step.prepareCompose(transforms);
         // static per-step params — the live count is GPU-resident (the pack writes it), not a config field.
-        Avbd.step.configure({
+        world.step.configure({
             dt: Time.FIXED_DT,
             gravity: GRAVITY,
             alpha: ALPHA,
@@ -327,21 +338,22 @@ export const AvbdPlugin: Plugin = {
         });
         // mirror the used-color count for the readback-bounded color loop (allocated here, after
         // MirrorPlugin.initialize's Mirror.reset, so it survives the build).
-        colorMirror = mirror(Avbd.step.colorCount);
-        springSig = 0;
-        jointSig = 0;
+        world.colorMirror = mirror(world.step.colorCount);
+        world.springSig = 0;
+        world.jointSig = 0;
     },
 
-    dispose() {
-        stamps.clear();
-        colorMirror?.dispose();
-        colorMirror = null;
-        bodyMirror?.dispose();
-        bodyMirror = null;
-        cachedBuf = null;
-        cachedView = null;
-        Avbd.step?.destroy();
-        Avbd.step = null;
+    dispose(state) {
+        const world = avbdWorld(state);
+        world.stamps.clear();
+        world.colorMirror?.dispose();
+        world.colorMirror = null;
+        world.bodyMirror?.dispose();
+        world.bodyMirror = null;
+        world.cachedBuf = null;
+        world.cachedView = null;
+        world.step?.destroy();
+        world.step = null;
     },
 };
 

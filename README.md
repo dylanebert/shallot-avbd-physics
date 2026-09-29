@@ -17,6 +17,6 @@ name it in `shallot.json` in place of `Physics`:
 }
 ```
 
-or add `AvbdPlugin` to a plugin list in code. read poses with `Avbd.readBody`; `Avbd.step` is the raw step. it needs a webgpu device; without one, stay on the built-in solver.
+or add `AvbdPlugin` to a plugin list in code. Read poses with `Avbd.readBody(state, eid)` and reach the raw solver through `Avbd.step(state)`. AVBD resources belong to that State; it needs WebGPU, so without a device stay on the built-in solver.
 
 changing it: [`CONTRIBUTING.md`](CONTRIBUTING.md). mit.
