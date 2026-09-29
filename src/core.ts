@@ -1,9 +1,8 @@
-// AVBD extension surface — the GPU step pipeline + the SAT WGSL, for custom tooling, tests, and the gym
-// scenario. The happy path (the `Body` component + `AvbdPlugin`) ships on the `avbd` barrel.
+// AVBD solver core — the GPU step pipeline + the SAT WGSL, for custom tooling, tests, and the gym
+// scenario. The plugin that read Shallot's retired per-field Slab buffers is intentionally absent.
 
 export { collideWgsl, hullWgsl, MAX_CONTACTS, SPECULATIVE_DISTANCE } from "./collide";
 export { HULL_FACE_STRIDE, HULL_HEADER, packHulls } from "./hull";
-export { Avbd } from "./index";
 export {
     BODY_MARGIN,
     BODY_VEC4,
