@@ -321,7 +321,7 @@ export const AvbdPlugin: Plugin = {
             gen,
             mask,
         });
-        world.bodyMirror = mirror(world.step.bodies);
+        world.bodyMirror = mirror(state, world.step.bodies);
         const transforms = Compute.buffers.get("transforms");
         if (transforms) await world.step.prepareCompose(transforms);
         // static per-step params — the live count is GPU-resident (the pack writes it), not a config field.
@@ -338,7 +338,7 @@ export const AvbdPlugin: Plugin = {
         });
         // mirror the used-color count for the readback-bounded color loop (allocated here, after
         // MirrorPlugin.initialize's Mirror.reset, so it survives the build).
-        world.colorMirror = mirror(world.step.colorCount);
+        world.colorMirror = mirror(state, world.step.colorCount);
         world.springSig = 0;
         world.jointSig = 0;
     },
