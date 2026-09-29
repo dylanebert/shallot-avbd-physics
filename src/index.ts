@@ -1,7 +1,6 @@
 import {
     Body,
     Compute,
-    capacity,
     Joint,
     type Mirror,
     MirrorPlugin,
@@ -72,14 +71,8 @@ const GAMMA = 0.999;
 // value. Raise per-scene via `Avbd.step.configure` for a known-harder pile. physics.md "f32 precision"
 // / "iters is a free knob".
 const ITERATIONS = 6;
-// the eid-space + dispatch bound (BVH prims, the eid map, dispatch cap) — the scene runs up to `capacity`−1
-// bodies at once (slot 0 is the never-minted sentinel). The full scene `capacity` (Phase 4.7): a body can
-// live at any eid, up to `capacity`−1 at once. The
-// per-eid manifold store sizes straight off it (Phase 4.9 robustness): each body owns a fixed pair block,
-// so memory scales with `capacity` (~4.6 MB at 1024, ~265 MB at the default 65536 — lower `capacity` to
-// shrink it), and a body can't overflow a global pool (no silent fall-through; `checkContactStore` guards
-// the device per-binding limit at construction).
-const MAX_BODIES = capacity;
+// The eid-space and dispatch bound is the owning State.capacity at warm (slot 0 is the never-minted
+// sentinel); each body owns a fixed pair block in the contact store.
 // dispatched-color cap (Phase 4): the primal dispatches at most this many colors per iteration, so the
 // dispatch count is bounded by the cap not the body count (avbd.md "Dispatch count"). The reference +
 // webphysics both cap at 8; the convergence probe found realistic piles color in ≤4, well under it.
@@ -312,9 +305,9 @@ export const AvbdPlugin: Plugin = {
         cachedBuf = null;
         cachedView = null;
         // the membership gate templates the pack's per-eid skip test. `build` fixes every component's
-        // bit up front, so `bit(Body)` is valid here; `capacity` is the eid range the pack walks.
+        // bit up front, so `bit(Body)` is valid here; the State capacity is the eid range the pack walks.
         const { gen, mask } = state.membership.bit(Body);
-        Avbd.step = await PhysicsStep.create(Compute.device, capacity, MAX_BODIES, {
+        Avbd.step = await PhysicsStep.create(Compute.device, state.capacity, state.capacity, {
             gen,
             mask,
         });
