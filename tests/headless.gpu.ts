@@ -91,6 +91,8 @@ function expectFinite(pose: {
 }
 
 // AVBD build, step, and public buffer readback
+test.todo("Stage 5 (Readback) owns eliminating the per-fixed-tick Uint32Array(colorMirror.snapshot.bytes) allocation", async () => {});
+
 test("gpu headless avbdplugin builds, steps, and probes finite body poses at capacity 8192", async () => {
     await setupGpuPeer();
     const app = await build({
