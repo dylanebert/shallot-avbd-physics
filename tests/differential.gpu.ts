@@ -75,7 +75,7 @@ test("gpu differential execution produces the intended contact and a geometry-bo
         const device = app.state.gpu.device;
         physics = await bounded(
             "AVBD differential pipelines",
-            PhysicsStep.create(device, CAPACITY, CAPACITY),
+            PhysicsStep.create(app.state, CAPACITY, CAPACITY),
         );
         const authored = scene();
         device.queue.writeBuffer(physics.bodies, 0, seed(authored));

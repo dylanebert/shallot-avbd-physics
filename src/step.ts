@@ -48,7 +48,7 @@
 // quantization deferred per gpu.md rule 8). The body + contact buffers are SoA cols-buffers (gpu.md
 // consolidation #1). Per-body CSR adjacency feeds the primal: each body reads only its own contacts.
 
-import { Compute, checkStorageBinding } from "@dylanebert/shallot";
+import { checkStorageBinding, type State } from "@dylanebert/shallot";
 // the shared LBVH builder (roadmap "Subgroup-first algorithms": physics is a consumer of the same
 // rendering-unaware builder a native-RT path would use). standard → extras is the documented exception
 // for this shared GPU primitive (exports.md `bvh/core`), not the onion default.
@@ -3972,6 +3972,7 @@ type VariantTag = "roRo" | "roRw" | "rwRw";
 const variants: Record<VariantTag, ReturnType<typeof accessors>> = { roRo, roRw, rwRw };
 
 async function buildPass(
+    state: State,
     device: GPUDevice,
     label: string,
     code: string,
@@ -3980,7 +3981,7 @@ async function buildPass(
 ): Promise<Pass> {
     const layout = device.createBindGroupLayout({ label, entries });
     const groups = [layout];
-    if (variant) groups.push(Compute.root.unwrap(variants[variant].layout));
+    if (variant) groups.push(state.gpu.root.unwrap(variants[variant].layout));
     const pipeline = await device.createComputePipelineAsync({
         label,
         layout: device.createPipelineLayout({ bindGroupLayouts: groups }),
@@ -4249,9 +4250,11 @@ export class PhysicsStep {
     // because `phys-compose` registers lazily on the first `compose()`, long after it.
     private readonly _scope: string;
     private readonly _registrations: Promise<void>[] = [];
+    private readonly _gpu: State["gpu"];
+    private readonly _state: State;
 
     private constructor(
-        device: GPUDevice,
+        state: State,
         eidCap: number,
         maxBodies: number,
         bvh: Bvh,
@@ -4262,10 +4265,13 @@ export class PhysicsStep {
             packScatter: Pass | null;
         },
     ) {
+        const device = state.gpu.device;
+        this._state = state;
+        this._gpu = state.gpu;
         this.device = device;
-        this._scope = precompileScope("phys");
+        this._scope = precompileScope(state, "phys");
         const register = (label: string, force: () => unknown): void => {
-            this._registrations.push(precompile(label, force));
+            this._registrations.push(precompile(state, label, force));
         };
         this.eidCap = eidCap;
         this.maxBodies = maxBodies;
@@ -4454,7 +4460,7 @@ export class PhysicsStep {
         // the shared solver group (params + bodies + pairContacts), one bind group per access variant —
         // every kernel's accessors resolved against one of these, so the dispatch helpers set it at
         // SOLVER_GROUP and no kernel re-declares the three bindings.
-        const root = Compute.root;
+        const root = this._gpu.root;
         const shared = {
             params: this._stepUbo,
             bodies: this.bodies,
@@ -4631,7 +4637,7 @@ export class PhysicsStep {
     // the coloring + repair pipelines bind the growable `constraintList` (setSprings/setJoints), so — like
     // the collide pipes' `hullData` growth — a grow re-`.with()`s onto the new buffer without recompiling.
     private _makeColoringPipe(): TgpuComputePipeline {
-        const root = Compute.root;
+        const root = this._gpu.root;
         this._coloringBase ??= root
             .createComputePipeline({ compute: coloringKernel })
             .$name("phys-coloring");
@@ -4650,7 +4656,7 @@ export class PhysicsStep {
     private _coloringBase?: TgpuComputePipeline;
 
     private _makeRepairPipe(): TgpuComputePipeline {
-        const root = Compute.root;
+        const root = this._gpu.root;
         this._repairBase ??= root
             .createComputePipeline({ compute: repairKernel })
             .$name("phys-repair");
@@ -4672,7 +4678,7 @@ export class PhysicsStep {
     private _collideBase?: TgpuComputePipeline[];
 
     private _makeCollidePipes(): TgpuComputePipeline[] {
-        const root = Compute.root;
+        const root = this._gpu.root;
         this._collideBase ??= [
             root.createComputePipeline({ compute: collideBoxKernel }).$name("phys-collide-box"),
             root
@@ -4715,7 +4721,7 @@ export class PhysicsStep {
     }
 
     private buildSolveBindGroups(): void {
-        const root = Compute.root;
+        const root = this._gpu.root;
         // `primalOwnLayout` (csr/csrList/constraintCsr/constraintList) is forced onto both the typed
         // primal and solve-lds by `solverRoRo`/`solverLds`'s internal reads — one bind group, shared.
         const ownGroup = root.createBindGroup(primalOwnLayout, {
@@ -4779,7 +4785,7 @@ export class PhysicsStep {
 
     private _csrColorSmallBase?: TgpuComputePipeline;
     private _makeCsrColorSmallPipe(): TgpuComputePipeline {
-        const root = Compute.root;
+        const root = this._gpu.root;
         this._csrColorSmallBase ??= root
             .createComputePipeline({ compute: csrColorSmallKernel })
             .$name("phys-csr-color-small");
@@ -4798,7 +4804,7 @@ export class PhysicsStep {
 
     private _jointInitBase?: TgpuComputePipeline;
     private _makeJointInitPipe(): TgpuComputePipeline {
-        const root = Compute.root;
+        const root = this._gpu.root;
         this._jointInitBase ??= root
             .createComputePipeline({ compute: jointInitKernel })
             .$name("phys-joint-init");
@@ -4815,7 +4821,7 @@ export class PhysicsStep {
 
     private _jointDualBase?: TgpuComputePipeline;
     private _makeJointDualPipe(): TgpuComputePipeline {
-        const root = Compute.root;
+        const root = this._gpu.root;
         this._jointDualBase ??= root
             .createComputePipeline({ compute: jointDualKernel })
             .$name("phys-joint-dual");
@@ -4833,20 +4839,21 @@ export class PhysicsStep {
      * + seed `bodies` directly.
      */
     static async create(
-        device: GPUDevice,
+        state: State,
         eidCap: number,
         maxBodies: number,
         packGate?: PackGate,
     ): Promise<PhysicsStep> {
+        const device = state.gpu.device;
         // the broadphase BVH over body sphere-AABBs — sized to the body pool, one prim per live body
-        const bvh = await createBvh(device, maxBodies);
+        const bvh = await createBvh(state, device, maxBodies);
         const [csrScan, packCount, packScan, packScatter] = await Promise.all([
-            buildPass(device, "phys-csr-scan", csrScanWgsl(maxBodies, eidCap), [
+            buildPass(state, device, "phys-csr-scan", csrScanWgsl(maxBodies, eidCap), [
                 buf(0, ro),
                 buf(1, rw),
             ]),
             packGate
-                ? buildPass(device, "phys-pack-count", packCountWgsl(packGate, eidCap), [
+                ? buildPass(state, device, "phys-pack-count", packCountWgsl(packGate, eidCap), [
                       buf(0, ro),
                       buf(1, rw), // packSums
                       buf(2, rw),
@@ -4861,6 +4868,7 @@ export class PhysicsStep {
                 : Promise.resolve(null),
             packGate
                 ? buildPass(
+                      state,
                       device,
                       "phys-pack-scan",
                       packScanWgsl(Math.ceil(eidCap / PACK_WG), maxBodies),
@@ -4877,6 +4885,7 @@ export class PhysicsStep {
                 : Promise.resolve(null),
             packGate
                 ? buildPass(
+                      state,
                       device,
                       "phys-pack-scatter",
                       packScatterWgsl(packGate, eidCap, maxBodies),
@@ -4884,7 +4893,7 @@ export class PhysicsStep {
                   )
                 : Promise.resolve(null),
         ]);
-        const step = new PhysicsStep(device, eidCap, maxBodies, bvh, {
+        const step = new PhysicsStep(state, eidCap, maxBodies, bvh, {
             csrScan,
             packCount,
             packScan,
@@ -5433,15 +5442,15 @@ export class PhysicsStep {
             this._packCount!,
             this._packCountBG!,
             this._packWgs,
-            Compute.span?.("phys:pack"),
+            this._gpu.span?.("phys:pack"),
         );
-        this.pass(encoder, this._packScan!, this._packScanBG!, 1, Compute.span?.("phys:pack"));
+        this.pass(encoder, this._packScan!, this._packScanBG!, 1, this._gpu.span?.("phys:pack"));
         this.pass(
             encoder,
             this._packScatter!,
             this._packScatterBG!,
             this._packWgs,
-            Compute.span?.("phys:pack"),
+            this._gpu.span?.("phys:pack"),
         );
     }
 
@@ -5503,7 +5512,7 @@ export class PhysicsStep {
     }
 
     /**
-     * record one full AVBD step onto `encoder`. Taps `Compute.span` if `ProfilePlugin` is installed.
+     * record one full AVBD step onto `encoder`. Taps this world's `state.gpu.span` if `ProfilePlugin` is installed.
      *
      * The colored primal is `iterations × maxColors` primal+commit pairs — `colorize` (ahead of the
      * primal) caps the colors at `maxColors`, so the dispatch count is bounded by the cap, not the body
@@ -5557,7 +5566,7 @@ export class PhysicsStep {
             // `pairList[eid·PAIRS_PER_BODY + k]` directly (nearest-K + static-pin, unused slots INVALID).
             {
                 const pass = encoder.beginComputePass({
-                    timestampWrites: Compute.span?.("phys:aabb"),
+                    timestampWrites: this._gpu.span?.("phys:aabb"),
                 });
                 this._aabbPipe.with(pass).dispatchWorkgroupsIndirect(this.dispatchArgs, 0);
                 pass.end();
@@ -5572,7 +5581,7 @@ export class PhysicsStep {
             this._smallRan = small;
             if (small) {
                 const pass = encoder.beginComputePass({
-                    timestampWrites: Compute.span?.("phys:broadphase"),
+                    timestampWrites: this._gpu.span?.("phys:broadphase"),
                 });
                 this._broadphaseSmallPipe
                     .with(pass)
@@ -5581,7 +5590,7 @@ export class PhysicsStep {
             } else {
                 this._bvh.build(encoder);
                 const pass = encoder.beginComputePass({
-                    timestampWrites: Compute.span?.("phys:broadphase"),
+                    timestampWrites: this._gpu.span?.("phys:broadphase"),
                 });
                 this._broadphasePipe.with(pass).dispatchWorkgroupsIndirect(this.dispatchArgs, 0);
                 pass.end();
@@ -5597,7 +5606,7 @@ export class PhysicsStep {
             // profiler sums all four.
             {
                 const pass = encoder.beginComputePass({
-                    timestampWrites: Compute.span?.("phys:collide"),
+                    timestampWrites: this._gpu.span?.("phys:collide"),
                 });
                 for (const pipe of this._collidePipes) {
                     pipe.with(pass).dispatchWorkgroupsIndirect(this.pairArgs, 0);
@@ -5615,7 +5624,7 @@ export class PhysicsStep {
             if (small) {
                 {
                     const pass = encoder.beginComputePass({
-                        timestampWrites: Compute.span?.("phys:csr"),
+                        timestampWrites: this._gpu.span?.("phys:csr"),
                     });
                     this._csrColorSmallPipe.with(pass).dispatchWorkgroups(1);
                     pass.end();
@@ -5630,7 +5639,7 @@ export class PhysicsStep {
             // dispatch (the count is CPU-authored, not GPU-resident); skipped entirely when there are no joints.
             if (this._jointCount > 0) {
                 const pass = encoder.beginComputePass({
-                    timestampWrites: Compute.span?.("phys:joint"),
+                    timestampWrites: this._gpu.span?.("phys:joint"),
                 });
                 this._jointInitPipe.with(pass).dispatchWorkgroups(Math.ceil(this._jointCount / 64));
                 pass.end();
@@ -5638,7 +5647,7 @@ export class PhysicsStep {
 
             {
                 const pass = encoder.beginComputePass({
-                    timestampWrites: Compute.span?.("phys:inertial"),
+                    timestampWrites: this._gpu.span?.("phys:inertial"),
                 });
                 this._inertialPipe.with(pass).dispatchWorkgroupsIndirect(this.dispatchArgs, 0);
                 pass.end();
@@ -5660,7 +5669,7 @@ export class PhysicsStep {
             this._ldsRan = lds;
             if (lds) {
                 const pass = encoder.beginComputePass({
-                    timestampWrites: Compute.span?.("phys:primal"),
+                    timestampWrites: this._gpu.span?.("phys:primal"),
                 });
                 this._solveLdsPipe.with(pass).dispatchWorkgroups(1);
                 pass.end();
@@ -5669,7 +5678,7 @@ export class PhysicsStep {
                     // timestamp every iteration — the profiler sums same-named spans, so this reports the FULL
                     // primal GPU time (all iterations × color dispatches), not just it 0.
                     const pass = encoder.beginComputePass({
-                        timestampWrites: Compute.span?.("phys:primal"),
+                        timestampWrites: this._gpu.span?.("phys:primal"),
                     });
                     // `_colorsToRun` colors/iteration (the readback-bounded count, Phase 4.9 Lever 1 — full cap until
                     // boundColors is fed a usedColors readback), one compute pass (the color rides a per-color
@@ -5694,7 +5703,7 @@ export class PhysicsStep {
                     // store, so next frame's collide warmstarts off it.
                     {
                         const dualPass = encoder.beginComputePass({
-                            timestampWrites: Compute.span?.("phys:dual"),
+                            timestampWrites: this._gpu.span?.("phys:dual"),
                         });
                         this._dualPipe.with(dualPass).dispatchWorkgroupsIndirect(this.pairArgs, 0);
                         dualPass.end();
@@ -5704,7 +5713,7 @@ export class PhysicsStep {
                     // wrote (like the contact dual). One thread per joint, in place in the persistent jointRecords.
                     if (this._jointCount > 0) {
                         const jointPass = encoder.beginComputePass({
-                            timestampWrites: Compute.span?.("phys:joint"),
+                            timestampWrites: this._gpu.span?.("phys:joint"),
                         });
                         this._jointDualPipe
                             .with(jointPass)
@@ -5716,7 +5725,7 @@ export class PhysicsStep {
 
             {
                 const pass = encoder.beginComputePass({
-                    timestampWrites: Compute.span?.("phys:velocity"),
+                    timestampWrites: this._gpu.span?.("phys:velocity"),
                 });
                 this._velocityPipe.with(pass).dispatchWorkgroupsIndirect(this.dispatchArgs, 0);
                 pass.end();
@@ -5734,7 +5743,7 @@ export class PhysicsStep {
             await this._composePreparation;
             if (this._composeDst === globalTransforms && this._composePipe) return;
         }
-        const root = Compute.root;
+        const root = this._gpu.root;
         this._composeBase ??= root
             .createComputePipeline({ compute: composeKernel })
             .$name("phys-compose");
@@ -5748,7 +5757,7 @@ export class PhysicsStep {
             )
             .with(roRo.layout, this._sharedBG.roRo);
         if (!this._composeCompiled) {
-            const preparation = precompile(`${this._scope}-compose`, () => {
+            const preparation = precompile(this._state, `${this._scope}-compose`, () => {
                 return pipe;
             }).then(() => {
                 this._composeCompiled = true;
@@ -5786,7 +5795,9 @@ export class PhysicsStep {
         }
         this._interpData[0] = alpha;
         this.device.queue.writeBuffer(this._interpUbo, 0, this._interpData);
-        const pass = encoder.beginComputePass({ timestampWrites: Compute.span?.("phys:compose") });
+        const pass = encoder.beginComputePass({
+            timestampWrites: this._gpu.span?.("phys:compose"),
+        });
         this._composePipe.with(pass).dispatchWorkgroupsIndirect(this.dispatchArgs, 0);
         pass.end();
     }
@@ -5808,7 +5819,7 @@ export class PhysicsStep {
         // color every live body — indirect off the live count (dispatchArgs).
         {
             const pass = encoder.beginComputePass({
-                timestampWrites: Compute.span?.("phys:coloring"),
+                timestampWrites: this._gpu.span?.("phys:coloring"),
             });
             this._coloringPipe.with(pass).dispatchWorkgroupsIndirect(this.dispatchArgs, 0);
             pass.end();
@@ -5826,7 +5837,7 @@ export class PhysicsStep {
         for (let r = 0; r < JOINT_REPAIR_ROUNDS; r++) {
             encoder.copyBufferToBuffer(this.colors, 0, this.colorScratch, 0, this.eidCap * 4);
             const pass = encoder.beginComputePass({
-                timestampWrites: Compute.span?.("phys:coloring"),
+                timestampWrites: this._gpu.span?.("phys:coloring"),
             });
             this._repairPipe.with(pass).dispatchWorkgroupsIndirect(this.dispatchArgs, 0);
             pass.end();
@@ -5845,13 +5856,17 @@ export class PhysicsStep {
         // zero only the count region [eidCap, 2·eidCap); the offset region is fully rewritten by the scan
         encoder.clearBuffer(this.csr, this.eidCap * 4, this.eidCap * 4);
         {
-            const pass = encoder.beginComputePass({ timestampWrites: Compute.span?.("phys:csr") });
+            const pass = encoder.beginComputePass({
+                timestampWrites: this._gpu.span?.("phys:csr"),
+            });
             this._csrCountPipe.with(pass).dispatchWorkgroupsIndirect(this.pairArgs, 0);
             pass.end();
         }
-        this.pass(encoder, this._csrScan, this._csrScanBG, 1, Compute.span?.("phys:csr"));
+        this.pass(encoder, this._csrScan, this._csrScanBG, 1, this._gpu.span?.("phys:csr"));
         {
-            const pass = encoder.beginComputePass({ timestampWrites: Compute.span?.("phys:csr") });
+            const pass = encoder.beginComputePass({
+                timestampWrites: this._gpu.span?.("phys:csr"),
+            });
             this._csrScatterPipe.with(pass).dispatchWorkgroupsIndirect(this.pairArgs, 0);
             pass.end();
         }
