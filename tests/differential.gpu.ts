@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { build } from "@dylanebert/shallot";
+import { createApp } from "@dylanebert/shallot";
 import { probeBuffer } from "@dylanebert/shallot/runtime";
 
 async function bounded<T>(label: string, promise: PromiseLike<T>): Promise<T> {
@@ -65,17 +65,17 @@ test("gpu differential execution produces the intended contact and a geometry-bo
     const peerModule = "bun-webgpu";
     const peer = (await import(peerModule)) as { setupGlobals(): Promise<void> };
     await peer.setupGlobals();
-    let app: Awaited<ReturnType<typeof build>> | undefined;
+    let app: Awaited<ReturnType<typeof createApp>> | undefined;
     let physics: PhysicsStep | undefined;
     try {
         app = await bounded(
             "AVBD differential world acquisition",
-            build({ defaults: false, plugins: [] }),
+            createApp({ defaults: false, plugins: [] }),
         );
-        const device = app.state.gpu.device;
+        const device = app.world.gpu.device;
         physics = await bounded(
             "AVBD differential pipelines",
-            PhysicsStep.create(app.state, CAPACITY, CAPACITY),
+            PhysicsStep.create(app.world, CAPACITY, CAPACITY),
         );
         const authored = scene();
         device.queue.writeBuffer(physics.bodies, 0, seed(authored));
@@ -103,7 +103,7 @@ test("gpu differential execution produces the intended contact and a geometry-bo
         physics.record(encoder);
         device.queue.submit([encoder.finish()]);
 
-        const contactProbe = await probeBuffer(app.state, physics.pairContacts, {
+        const contactProbe = await probeBuffer(app.world, physics.pairContacts, {
             offset: 0,
             size: physics.recordCap * CONTACT_VEC4 * 16,
             label: "avbd-sentinel-contacts",
@@ -120,7 +120,7 @@ test("gpu differential execution produces the intended contact and a geometry-bo
             "device contact store contains the authored dynamic-ground pair",
         ).toBe(true);
 
-        const bodyProbe = await probeBuffer(app.state, physics.bodies, {
+        const bodyProbe = await probeBuffer(app.world, physics.bodies, {
             offset: 0,
             size: CAPACITY * BODY_VEC4 * 16,
             label: "avbd-sentinel-bodies",

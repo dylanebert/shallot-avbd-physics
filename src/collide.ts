@@ -149,7 +149,7 @@ const satQConj = tgpu
     })
     .$name("satQConj");
 
-/** rotate `v` by the unit quat `q` (active rotation, shallot's `composeTransform` form).
+/** rotate `v` by the unit quat `q` (active rotation, shallot's `composeGlobalTransform` form).
  *  @example const world = satQRotate(quat, local); */
 const satQRotate = tgpu
     .fn(

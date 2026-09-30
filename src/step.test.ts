@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { State } from "@dylanebert/shallot/ecs";
+import { World } from "@dylanebert/shallot/ecs";
 
 import { precompile, precompileAll, requestGPU } from "@dylanebert/shallot/runtime";
 import { PhysicsStep } from "./step";
@@ -41,30 +41,30 @@ const stub = (): GPUDevice =>
     }) as unknown as GPUDevice;
 
 test("a second PhysicsStep receives unique precompile labels", async () => {
-    const state = new State();
+    const world = new World();
     try {
         const device = stub();
-        state.attachGpu(await requestGPU(device));
+        world.attachGpu(await requestGPU(device));
 
-        await PhysicsStep.create(state, 64, 64);
-        expect(() => precompile(state, "phys-aabb", () => true)).toThrow(/duplicate/);
+        await PhysicsStep.create(world, 64, 64);
+        expect(() => precompile(world, "phys-aabb", () => true)).toThrow(/duplicate/);
 
-        await PhysicsStep.create(state, 64, 64);
-        expect(() => precompile(state, "phys-2-aabb", () => true)).toThrow(/duplicate/);
-        expect(() => precompile(state, "phys-2-collide-box", () => true)).toThrow(/duplicate/);
-        expect(() => precompile(state, "phys-2-joint-dual", () => true)).toThrow(/duplicate/);
+        await PhysicsStep.create(world, 64, 64);
+        expect(() => precompile(world, "phys-2-aabb", () => true)).toThrow(/duplicate/);
+        expect(() => precompile(world, "phys-2-collide-box", () => true)).toThrow(/duplicate/);
+        expect(() => precompile(world, "phys-2-joint-dual", () => true)).toThrow(/duplicate/);
     } finally {
-        state.dispose();
+        world.dispose();
     }
 }, 250);
 
 test("compose uses the precompile scope of its PhysicsStep instance", async () => {
-    const state = new State();
+    const world = new World();
     try {
         const device = stub();
-        state.attachGpu(await requestGPU(device));
-        const first = await PhysicsStep.create(state, 64, 64);
-        const second = await PhysicsStep.create(state, 64, 64);
+        world.attachGpu(await requestGPU(device));
+        const first = await PhysicsStep.create(world, 64, 64);
+        const second = await PhysicsStep.create(world, 64, 64);
 
         // The stub buffer carries no schema for the indirect dispatch to read. Swallow that dispatch,
         // never a duplicate label: the collision this guards against surfaces at preparation.
@@ -85,16 +85,16 @@ test("compose uses the precompile scope of its PhysicsStep instance", async () =
         };
 
         await composeOnce(first);
-        expect(() => precompile(state, "phys-compose", () => true)).toThrow(/duplicate/);
+        expect(() => precompile(world, "phys-compose", () => true)).toThrow(/duplicate/);
         await composeOnce(second);
-        expect(() => precompile(state, "phys-2-compose", () => true)).toThrow(/duplicate/);
+        expect(() => precompile(world, "phys-2-compose", () => true)).toThrow(/duplicate/);
     } finally {
-        state.dispose();
+        world.dispose();
     }
 }, 250);
 
 test("compose refuses before late validation settles and preserves its failure", async () => {
-    const state = new State();
+    const world = new World();
     let rejectFence!: (error: Error) => void;
     const fence = new Promise<void>((_, reject) => {
         rejectFence = reject;
@@ -109,7 +109,7 @@ test("compose refuses before late validation settles and preserves its failure",
             pushErrorScope() {},
             popErrorScope: async () => null,
         } as unknown as GPUDevice;
-        state.attachGpu(await requestGPU(device));
+        world.attachGpu(await requestGPU(device));
         const bound = {
             $name() {
                 return this;
@@ -119,15 +119,15 @@ test("compose refuses before late validation settles and preserves its failure",
             },
             initAsync: () => lateFence ?? Promise.resolve(),
         };
-        Object.assign(state.gpu, {
+        Object.assign(world.gpu, {
             root: {
                 createComputePipeline: () => bound,
                 createBindGroup: () => ({}),
                 unwrap: (value: unknown) => value,
             },
         });
-        const step = await PhysicsStep.create(state, 64, 64);
-        await precompileAll(state);
+        const step = await PhysicsStep.create(world, 64, 64);
+        await precompileAll(world);
         lateFence = fence;
 
         const globalTransforms = device.createBuffer({ size: 64, usage: GPUBufferUsage.STORAGE });
@@ -150,12 +150,12 @@ test("compose refuses before late validation settles and preserves its failure",
         expect(String(failure)).toContain("late compose fence failed");
         expect(() => step.compose(encoder, globalTransforms)).toThrow("late compose fence failed");
     } finally {
-        state.dispose();
+        world.dispose();
     }
 }, 250);
 
 test("public PhysicsStep creation awaits and propagates late precompile failure", async () => {
-    const state = new State();
+    const world = new World();
     let physicsAllocated = false;
     let physicsFences = 0;
     let rejectFirst!: (error: Error) => void;
@@ -181,8 +181,8 @@ test("public PhysicsStep creation awaits and propagates late precompile failure"
                 return createBuffer(descriptor);
             },
         } as unknown as GPUDevice;
-        state.attachGpu(await requestGPU(device));
-        await precompileAll(state);
+        world.attachGpu(await requestGPU(device));
+        await precompileAll(world);
         const bound = {
             $name() {
                 return this;
@@ -196,7 +196,7 @@ test("public PhysicsStep creation awaits and propagates late precompile failure"
                 return physicsFences === 1 ? firstFence : restFence;
             },
         };
-        Object.assign(state.gpu, {
+        Object.assign(world.gpu, {
             root: {
                 createComputePipeline: () => bound,
                 createBindGroup: () => ({}),
@@ -204,7 +204,7 @@ test("public PhysicsStep creation awaits and propagates late precompile failure"
             },
         });
 
-        const creation = PhysicsStep.create(state, 64, 64);
+        const creation = PhysicsStep.create(world, 64, 64);
         while (!physicsAllocated) await Promise.resolve();
         let returned = false;
         void creation.then(
@@ -231,6 +231,6 @@ test("public PhysicsStep creation awaits and propagates late precompile failure"
             message: expect.stringContaining("late physics fence failed"),
         });
     } finally {
-        state.dispose();
+        world.dispose();
     }
 }, 250);

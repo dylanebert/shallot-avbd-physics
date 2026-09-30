@@ -48,7 +48,7 @@
 // quantization deferred per gpu.md rule 8). The body + contact buffers are SoA cols-buffers (gpu.md
 // consolidation #1). Per-body CSR adjacency feeds the primal: each body reads only its own contacts.
 
-import { checkStorageBinding, type State } from "@dylanebert/shallot";
+import { checkStorageBinding, type World } from "@dylanebert/shallot";
 // the shared LBVH builder (roadmap "Subgroup-first algorithms": physics is a consumer of the same
 // rendering-unaware builder a native-RT path would use). standard → extras is the documented exception
 // for this shared GPU primitive (exports.md `bvh/core`), not the onion default.
@@ -3317,7 +3317,7 @@ const velocityKernel = tgpu
 
 // ── CSR adjacency: per-body contact lists, so the primal + coloring read only a body's own contacts ──
 // From the persistent `pairContacts` (the collide wrote this frame's manifolds in place), build a
-// compressed-sparse-row index keyed by eid (the Part-pack count→scan→scatter spine), packed into ONE `csr`
+// compressed-sparse-row index keyed by eid (the MeshInstance-pack count→scan→scatter spine), packed into ONE `csr`
 // buffer: `csr[eidCap+eid]` = contacts per body, `csr[eid]` = the start of its slice in `csrList`,
 // `csrList[off .. off+count]` the MANIFOLD-RECORD indices touching that body (the primal reads `cc(csrList[k])`).
 // Offsets + counts share one binding (Phase 4.9) so the maxed primal/coloring passes bind one slot, not two.
@@ -3656,8 +3656,8 @@ const csrColorSmallKernel = tgpu
     })
     .$name("csrColorSmallMain");
 
-// ── pack: GPU membership-scan → the dense→eid map (the Part-pack firehose) ──
-// One lane per eid over scene capacity, gated on the Body membership bit (the mirror the Part pack
+// ── pack: GPU membership-scan → the dense→eid map (the MeshInstance-pack firehose) ──
+// One lane per eid over scene capacity, gated on the Body membership bit (the mirror the MeshInstance pack
 // reads). FULLY GPU — no CPU entity iteration, not even a marker query. Each live eid does two things:
 //   • PACK — a deterministic eid-sorted compaction into `eids` (`eids[0]` = the live count, `eids[1+d]`
 //     = the d-th live eid — the dense→eid map every body pass reads as `i = eids[1+gid.x]`). Sorted
@@ -3680,7 +3680,7 @@ const csrColorSmallKernel = tgpu
 // membership prefix (cheaper than storing per-lane bases) and writes the sorted slots — chunks are
 // disjoint and eid-ordered, so the output is bit-identical to the single-WG form.
 interface PackGate {
-    /** the Body component's membership word index + bit mask (`state.membership.bit(Body)`) */
+    /** the Body component's membership word index + bit mask (`world.membership.bit(Body)`) */
     gen: number;
     mask: number;
 }
@@ -3972,7 +3972,7 @@ type VariantTag = "roRo" | "roRw" | "rwRw";
 const variants: Record<VariantTag, ReturnType<typeof accessors>> = { roRo, roRw, rwRw };
 
 async function buildPass(
-    state: State,
+    world: World,
     device: GPUDevice,
     label: string,
     code: string,
@@ -3981,7 +3981,7 @@ async function buildPass(
 ): Promise<Pass> {
     const layout = device.createBindGroupLayout({ label, entries });
     const groups = [layout];
-    if (variant) groups.push(state.gpu.root.unwrap(variants[variant].layout));
+    if (variant) groups.push(world.gpu.root.unwrap(variants[variant].layout));
     const pipeline = await device.createComputePipelineAsync({
         label,
         layout: device.createPipelineLayout({ bindGroupLayouts: groups }),
@@ -4250,11 +4250,11 @@ export class PhysicsStep {
     // because `phys-compose` registers lazily on the first `compose()`, long after it.
     private readonly _scope: string;
     private readonly _registrations: Promise<void>[] = [];
-    private readonly _gpu: State["gpu"];
-    private readonly _state: State;
+    private readonly _gpu: World["gpu"];
+    private readonly _state: World;
 
     private constructor(
-        state: State,
+        world: World,
         eidCap: number,
         maxBodies: number,
         bvh: Bvh,
@@ -4265,13 +4265,13 @@ export class PhysicsStep {
             packScatter: Pass | null;
         },
     ) {
-        const device = state.gpu.device;
-        this._state = state;
-        this._gpu = state.gpu;
+        const device = world.gpu.device;
+        this._state = world;
+        this._gpu = world.gpu;
         this.device = device;
-        this._scope = precompileScope(state, "phys");
+        this._scope = precompileScope(world, "phys");
         const register = (label: string, force: () => unknown): void => {
-            this._registrations.push(precompile(state, label, force));
+            this._registrations.push(precompile(world, label, force));
         };
         this.eidCap = eidCap;
         this.maxBodies = maxBodies;
@@ -4839,21 +4839,21 @@ export class PhysicsStep {
      * + seed `bodies` directly.
      */
     static async create(
-        state: State,
+        world: World,
         eidCap: number,
         maxBodies: number,
         packGate?: PackGate,
     ): Promise<PhysicsStep> {
-        const device = state.gpu.device;
+        const device = world.gpu.device;
         // the broadphase BVH over body sphere-AABBs — sized to the body pool, one prim per live body
-        const bvh = await createBvh(state, device, maxBodies);
+        const bvh = await createBvh(world, device, maxBodies);
         const [csrScan, packCount, packScan, packScatter] = await Promise.all([
-            buildPass(state, device, "phys-csr-scan", csrScanWgsl(maxBodies, eidCap), [
+            buildPass(world, device, "phys-csr-scan", csrScanWgsl(maxBodies, eidCap), [
                 buf(0, ro),
                 buf(1, rw),
             ]),
             packGate
-                ? buildPass(state, device, "phys-pack-count", packCountWgsl(packGate, eidCap), [
+                ? buildPass(world, device, "phys-pack-count", packCountWgsl(packGate, eidCap), [
                       buf(0, ro),
                       buf(1, rw), // packSums
                       buf(2, rw),
@@ -4868,7 +4868,7 @@ export class PhysicsStep {
                 : Promise.resolve(null),
             packGate
                 ? buildPass(
-                      state,
+                      world,
                       device,
                       "phys-pack-scan",
                       packScanWgsl(Math.ceil(eidCap / PACK_WG), maxBodies),
@@ -4885,7 +4885,7 @@ export class PhysicsStep {
                 : Promise.resolve(null),
             packGate
                 ? buildPass(
-                      state,
+                      world,
                       device,
                       "phys-pack-scatter",
                       packScatterWgsl(packGate, eidCap, maxBodies),
@@ -4893,7 +4893,7 @@ export class PhysicsStep {
                   )
                 : Promise.resolve(null),
         ]);
-        const step = new PhysicsStep(state, eidCap, maxBodies, bvh, {
+        const step = new PhysicsStep(world, eidCap, maxBodies, bvh, {
             csrScan,
             packCount,
             packScan,
@@ -5104,7 +5104,7 @@ export class PhysicsStep {
      * set a dynamic body's linear velocity — a launch impulse (the gravity-gun throw). The next fixed
      * step's inertial pass integrates it (`predicted = pos + vel·dt`); the BDF1 velocity recovery then
      * re-owns the lane, so the write is consumed exactly once. Queue-ordered: a write before this tick's
-     * StepSystem submit lands in this tick's solve, after it in the next. Call on a LIVE (seeded) body —
+     * StepPhysicsSystem submit lands in this tick's solve, after it in the next. Call on a LIVE (seeded) body —
      * a body spawned this frame is re-seeded to velocity 0 by the next pack.
      */
     setVelocity(eid: number, vx: number, vy: number, vz: number): void {
@@ -5512,7 +5512,7 @@ export class PhysicsStep {
     }
 
     /**
-     * record one full AVBD step onto `encoder`. Taps this world's `state.gpu.span` if `ProfilePlugin` is installed.
+     * record one full AVBD step onto `encoder`. Taps this world's `world.gpu.span` if `ProfilePlugin` is installed.
      *
      * The colored primal is `iterations × maxColors` primal+commit pairs — `colorize` (ahead of the
      * primal) caps the colors at `maxColors`, so the dispatch count is bounded by the cap, not the body

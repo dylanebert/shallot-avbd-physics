@@ -1,5 +1,5 @@
 import { expect, setDefaultTimeout, test } from "bun:test";
-import { build, type Plugin } from "@dylanebert/shallot";
+import { createApp, type Plugin } from "@dylanebert/shallot";
 
 setDefaultTimeout(1000);
 
@@ -45,13 +45,13 @@ test.todo("avbd-rebuild: fixed count scheduling constructs no Uint32Array per ti
     };
     const Original = Uint32Array;
     let views = 0;
-    let app: Awaited<ReturnType<typeof build>> | undefined;
+    let app: Awaited<ReturnType<typeof createApp>> | undefined;
     try {
-        app = await build({
+        app = await createApp({
             defaults: false,
             plugins: [plugin],
             device,
-            scene: `<scene><a body="pos: 0 0 0; half-extents: 10 0.5 10; mass: 0" /><a body="pos: 0 2 0; half-extents: 0.5 0.5 0.5; mass: 1" /></scene>`,
+            scene: `<scene><a body="position: 0 0 0; half-extents: 10 0.5 10; mass: 0" /><a body="position: 0 2 0; half-extents: 0.5 0.5 0.5; mass: 1" /></scene>`,
         });
         globalThis.Uint32Array = new Proxy(Original, {
             construct(target, args, newTarget) {
@@ -63,7 +63,7 @@ test.todo("avbd-rebuild: fixed count scheduling constructs no Uint32Array per ti
         expect(views).toBe(1);
         views = 0;
         maps = 0;
-        for (let i = 0; i < 5; i++) app.state.step(1 / 60);
+        for (let i = 0; i < 5; i++) app.world.step(1 / 60);
         await bounded("AVBD fixed count submissions", device.queue.onSubmittedWorkDone());
         if (validation) throw validation;
         expect(views).toBe(0);
