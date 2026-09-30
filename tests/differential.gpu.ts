@@ -1,6 +1,22 @@
 import { expect, test } from "bun:test";
 
-import { Compute, probeBuffer, requestGPU } from "@dylanebert/shallot/runtime";
+import { build } from "@dylanebert/shallot";
+import { probeBuffer } from "@dylanebert/shallot/runtime";
+
+async function bounded<T>(label: string, promise: PromiseLike<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error(`${label} exceeded 15000 ms`)), 15000);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 import {
     B_POS,
     BODY_VEC4,
@@ -49,12 +65,18 @@ test("gpu differential execution produces the intended contact and a geometry-bo
     const peerModule = "bun-webgpu";
     const peer = (await import(peerModule)) as { setupGlobals(): Promise<void> };
     await peer.setupGlobals();
-    const previousCompute = { ...Compute };
-    let device: GPUDevice | undefined;
+    let app: Awaited<ReturnType<typeof build>> | undefined;
     let physics: PhysicsStep | undefined;
     try {
-        ({ device } = await requestGPU());
-        physics = await PhysicsStep.create(device, CAPACITY, CAPACITY);
+        app = await bounded(
+            "AVBD differential world acquisition",
+            build({ defaults: false, plugins: [] }),
+        );
+        const device = app.state.gpu.device;
+        physics = await bounded(
+            "AVBD differential pipelines",
+            PhysicsStep.create(device, CAPACITY, CAPACITY),
+        );
         const authored = scene();
         device.queue.writeBuffer(physics.bodies, 0, seed(authored));
         device.queue.writeBuffer(
@@ -81,7 +103,7 @@ test("gpu differential execution produces the intended contact and a geometry-bo
         physics.record(encoder);
         device.queue.submit([encoder.finish()]);
 
-        const contactProbe = await probeBuffer(device, physics.pairContacts, {
+        const contactProbe = await probeBuffer(app.state, physics.pairContacts, {
             offset: 0,
             size: physics.recordCap * CONTACT_VEC4 * 16,
             label: "avbd-sentinel-contacts",
@@ -98,7 +120,7 @@ test("gpu differential execution produces the intended contact and a geometry-bo
             "device contact store contains the authored dynamic-ground pair",
         ).toBe(true);
 
-        const bodyProbe = await probeBuffer(device, physics.bodies, {
+        const bodyProbe = await probeBuffer(app.state, physics.bodies, {
             offset: 0,
             size: CAPACITY * BODY_VEC4 * 16,
             label: "avbd-sentinel-bodies",
@@ -122,13 +144,7 @@ test("gpu differential execution produces the intended contact and a geometry-bo
         try {
             physics?.destroy();
         } finally {
-            try {
-                device?.destroy();
-            } finally {
-                for (const key of Object.keys(Compute))
-                    delete (Compute as unknown as Record<string, unknown>)[key];
-                Object.assign(Compute, previousCompute);
-            }
+            app?.dispose();
         }
     }
 }, 20_000);

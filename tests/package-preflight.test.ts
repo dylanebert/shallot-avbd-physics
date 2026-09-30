@@ -113,13 +113,13 @@ import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import * as avbd from "@dylanebert/shallot-avbd-physics";
 import { MAX_CONTACTS, PhysicsStep } from "@dylanebert/shallot-avbd-physics/core";
-import avbd from "@dylanebert/shallot-avbd-physics/package.json";
+import avbdManifest from "@dylanebert/shallot-avbd-physics/package.json";
 import shallot from "@dylanebert/shallot/package.json";
 import typegpu from "typegpu/package.json";
 
 if ("AvbdPlugin" in avbd || "Avbd" in avbd || typeof PhysicsStep !== "function" || MAX_CONTACTS !== 4)
   throw new Error("the removed Slab-backed plugin returned or the low-level solver exports broke");
-if (avbd.name !== "@dylanebert/shallot-avbd-physics")
+if (avbdManifest.name !== "@dylanebert/shallot-avbd-physics")
   throw new Error("installed AVBD package has the wrong identity");
 if (shallot.version !== "0.10.0-next.2") throw new Error("installed Shallot has the wrong version");
 if (Object.keys(shallot.exports).some((name) => name.includes("harness")))

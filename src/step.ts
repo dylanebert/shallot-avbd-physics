@@ -2921,7 +2921,7 @@ const jointInitKernel = tgpu
 
         // both-static guard: a joint NO dynamic body can resolve is never satisfiable by the primal, so
         // its dual ramps penalty + lambda unbounded (avbd.md "Joint guards"). Checked EVERY frame — a
-        // persistent gauge, not a one-frame blip a lagged Mirror readback can miss.
+        // persistent gauge, not a one-frame blip a requested readback can miss.
         const aStatic = aWorld || roRo.bMass(a) <= 0;
         if (aStatic && roRo.bMass(b) <= 0) {
             jointRw.layout.$.jointRecords[recBase + 3].y = std.bitcastU32toF32(0);
@@ -4046,9 +4046,16 @@ export class PhysicsStep {
     readonly colorScratch: GPUBuffer;
     /** the bounded color loop's readback words: `colorCount[0]` = the used-color count this step (max
      * dynamic color + 1, written by `colorize`), `colorCount[1]` = the clamped live body count (written by
-     * `packScan`). A consumer Mirrors the buffer (frame-stale) and feeds `boundColors` + `boundBodies`,
+     * `packScan`). A consumer requests this buffer and feeds frame-stale `boundColors` + `boundBodies`,
      * which cap the color-passes at `min(maxColors, usedColors + COLOR_MARGIN)` (Phase 4.9 Lever 1) and
-     * size their direct dispatch off the live count + BODY_MARGIN (rung 0). */
+     * size their direct dispatch off the live count + BODY_MARGIN (rung 0). There is no automatic readback.
+     * A plugin feeding these bytes to fixed simulation declares `deterministic: false`.
+     * @example
+     * const result = await probeBuffer(state, step.colorCount); // from Shallot's /runtime
+     * const counts = new Uint32Array(result.bytes);
+     * step.boundColors(counts[0]);
+     * step.boundBodies(counts[1]);
+     */
     readonly colorCount: GPUBuffer;
     /** the dense→eid map: `eids[0]` = live count, `eids[1+d]` = the d-th live eid (the pack's output) */
     readonly eids: GPUBuffer;
@@ -4342,7 +4349,7 @@ export class PhysicsStep {
         });
         // the used-color count (`colorCount[0]`), the readback-bounded color loop's input (Phase 4.9 Lever 1).
         // 16 B (one used slot + padding) — STORAGE for the colorize atomicMax, COPY_DST for the per-step clear,
-        // COPY_SRC so a consumer can Mirror it for the frame-stale readback that feeds `boundColors`.
+        // COPY_SRC for an explicit counter request that can feed frame-stale `boundColors`.
         this.colorCount = device.createBuffer({
             label: "phys-color-count",
             size: 16,
@@ -5331,7 +5338,7 @@ export class PhysicsStep {
 
     /**
      * the readback-bounded color loop (Phase 4.9 Lever 1): set the dispatched color count from a frame-stale
-     * `usedColors` (= the greedy's max dynamic color + 1, read from a Mirror of {@link colorCount}). The primal
+     * `usedColors` (= the greedy's max dynamic color + 1, read by a request for {@link colorCount}). The primal
      * dispatches `min(maxColors, usedColors + COLOR_MARGIN)` color-passes per iteration — a sparse scene runs
      * ~2-3 dispatched colors, a dense pile caps at `maxColors` (the empty color-passes above the used count
      * are the saving, the overhead-bound common case; gpu.md "Dispatch count is a first-class cost").
@@ -5349,7 +5356,7 @@ export class PhysicsStep {
     /**
      * the direct color-loop dispatch (dispatch-ladder rung 0): size the primal/commit color loop's
      * dispatch from a frame-stale live body count (`colorCount[1]`, written by `packScan`, read from
-     * the same Mirror as {@link boundColors}'s word). The loop dispatches
+     * the same request as {@link boundColors}'s word). The loop dispatches
      * `ceil((liveCount + BODY_MARGIN) / 64)` workgroups DIRECT — an indirect dispatch costs ≈ 2× a direct
      * one (Dawn's injected validation pass, physics.md "Dispatch count"), and the color loop is
      * `iters × colors × 2` dispatches, the dominant block. Over-dispatch is correctness-safe (the body

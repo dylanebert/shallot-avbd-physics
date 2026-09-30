@@ -7,7 +7,6 @@ import {
     Character,
     CharacterPlugin,
     InputPlugin,
-    MirrorPlugin,
     PhysicsPlugin,
     PlayerPlugin,
     RenderPlugin,
@@ -45,7 +44,7 @@ function expectFinite(pose: {
 test("gpu headless characterplugin sweeps headlessly", async () => {
     await setupGpuPeer();
     const app = await build({
-        plugins: [MirrorPlugin, PhysicsPlugin, CharacterPlugin],
+        plugins: [PhysicsPlugin, CharacterPlugin],
         defaults: false,
         scene: `<scene>
                 <a body="pos: 0 0 0; half-extents: 10 0.5 10; mass: 0" />
@@ -75,7 +74,6 @@ test("gpu headless playerplugin composes headlessly", async () => {
             TransformsPlugin,
             RenderPlugin,
             InputPlugin,
-            MirrorPlugin,
             PhysicsPlugin,
             CharacterPlugin,
             PlayerPlugin,
