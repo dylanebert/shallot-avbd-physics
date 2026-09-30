@@ -68,13 +68,16 @@ test("compose uses the precompile scope of its PhysicsStep instance", async () =
         // The stub buffer carries no schema for the indirect dispatch to read. Swallow that dispatch,
         // never a duplicate label: the collision this guards against surfaces at preparation.
         const composeOnce = async (step: PhysicsStep) => {
-            const transforms = device.createBuffer({ size: 64, usage: GPUBufferUsage.STORAGE });
+            const globalTransforms = device.createBuffer({
+                size: 64,
+                usage: GPUBufferUsage.STORAGE,
+            });
             const encoder = {
                 beginComputePass: () => ({ end() {} }),
             } as unknown as GPUCommandEncoder;
-            await step.prepareCompose(transforms);
+            await step.prepareCompose(globalTransforms);
             try {
-                step.compose(encoder, transforms);
+                step.compose(encoder, globalTransforms);
             } catch (err) {
                 if (String(err).includes("duplicate precompile")) throw err;
             }
@@ -126,14 +129,16 @@ test("compose refuses before late validation settles and preserves its failure",
         await precompileAll();
         lateFence = fence;
 
-        const transforms = device.createBuffer({ size: 64, usage: GPUBufferUsage.STORAGE });
-        const preparing = step.prepareCompose(transforms);
+        const globalTransforms = device.createBuffer({ size: 64, usage: GPUBufferUsage.STORAGE });
+        const preparing = step.prepareCompose(globalTransforms);
         const encoder = {
             beginComputePass: () => {
                 throw new Error("compose encoded before validation settled");
             },
         } as unknown as GPUCommandEncoder;
-        expect(() => step.compose(encoder, transforms)).toThrow("await prepareCompose(transforms)");
+        expect(() => step.compose(encoder, globalTransforms)).toThrow(
+            "await prepareCompose(globalTransforms)",
+        );
 
         rejectFence(new Error("late compose fence failed"));
         const failure = await preparing.catch((error: unknown) => error);
@@ -142,7 +147,7 @@ test("compose refuses before late validation settles and preserves its failure",
             label: "phys-compose",
         });
         expect(String(failure)).toContain("late compose fence failed");
-        expect(() => step.compose(encoder, transforms)).toThrow("late compose fence failed");
+        expect(() => step.compose(encoder, globalTransforms)).toThrow("late compose fence failed");
     } finally {
         Object.assign(Compute, saved);
     }

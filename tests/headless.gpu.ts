@@ -12,7 +12,6 @@ import {
     RenderPlugin,
     readBody,
     type State,
-    TransformsPlugin,
 } from "@dylanebert/shallot";
 
 /** fixed ticks before probing the headless body pose. */
@@ -70,14 +69,7 @@ test("gpu headless characterplugin sweeps headlessly", async () => {
 test("gpu headless playerplugin composes headlessly", async () => {
     await setupGpuPeer();
     const app = await build({
-        plugins: [
-            TransformsPlugin,
-            RenderPlugin,
-            InputPlugin,
-            PhysicsPlugin,
-            CharacterPlugin,
-            PlayerPlugin,
-        ],
+        plugins: [RenderPlugin, InputPlugin, PhysicsPlugin, CharacterPlugin, PlayerPlugin],
         defaults: false,
         scene: `<scene>
                 <a id="eye" camera transform="pos: 0 1.5 5" />

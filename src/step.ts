@@ -3230,21 +3230,15 @@ const solveLdsKernel = tgpu
     })
     .$name("solveLdsMain");
 
-// ── compose: scatter the interpolated body pose into the eid-indexed transform firehose ──
-// The bodied-entity half of the Body/Transform contract (roadmap): a `Body` is a `Part` whose world
-// matrix physics owns. `Body.excludes [Transform]`, so the Transform compose writes a stale slot for a
-// body eid; this pass runs after it and overwrites `transforms[eids[d]]` with the live pose. Scale is
-// 2·halfExtents — the cube mesh is unit (-0.5..0.5), so the render box matches the collision box (the
-// body pose itself is scale-free; this is render-only). Writes the decomposed `Xform` (the same struct
-// the Transform compose gathers); readers reconstruct the world transform via xformWgsl().
+// ── compose: scatter interpolated body GlobalTransform into eid-indexed output rows ──
+// A Body owns its fixed-tick GlobalTransform. This pass writes interpolated position, rotation and render
+// scale as an Xform record at each body eid; callers supply an eid-indexed buffer, not the engine's dense
+// GlobalTransform table. Scale is 2·halfExtents for the unit box mesh (the collider remains scale-free).
+// Renderers reconstruct the world matrix from the record via xformWgsl().
 //
-// Render interpolation (Phase 5): the solver steps at the fixed
-// rate but compose runs every render frame, so at >60Hz it would repeat a fixed-step pose then jump
-// (stutter). Blend prev→curr by `interp.alpha` (= time.fixedAlpha, the fraction past the last fixed tick).
-// The prev pose needs no extra column or snapshot pass: the inertial pass already saves x⁻ (the pre-warmstart
-// pose = last frame's settled pose) into B_INITL/B_INITQ before warmstart mutates B_POS, so prev = bInit*,
-// curr = bPos/bQuat. lerp position, nlerp quat on the shortest arc. For a static or freshly-seeded body
-// B_INITL == B_POS, so it's a no-op; at alpha = 1 this is exactly the bare current pose.
+// The solver retains the previous and current body placement for interpolation: lerp position and nlerp
+// rotation on the shortest arc using `interp.alpha`. A static or newly seeded body has equal history values;
+// at alpha = 1 this is the current fixed-tick GlobalTransform.
 /** interpolation alpha uniform — `time.fixedAlpha`, the fraction past the last fixed tick */
 const Interp = d.struct({ alpha: d.f32 }).$name("Interp");
 
@@ -3265,7 +3259,7 @@ const nlerpShortest = tgpu
 const composeLayout = tgpu
     .bindGroupLayout({
         eids: { storage: d.arrayOf(d.u32), access: "readonly" },
-        transforms: { storage: d.arrayOf(Xform), access: "mutable" },
+        globalTransforms: { storage: d.arrayOf(Xform), access: "mutable" },
         interp: { uniform: Interp },
     })
     .$idx(0);
@@ -3292,7 +3286,7 @@ const composeKernel = tgpu
             s = d.vec3f(2 * radius, roRo.bHalf(i).y + radius, 2 * radius);
         }
         // element-schema copy — p/q/s are reference-yielding call results (mix/nlerpShortest/select)
-        composeLayout.$.transforms[i] = Xform({
+        composeLayout.$.globalTransforms[i] = Xform({
             pos: d.vec3f(p),
             quat: d.vec4f(q),
             scale: d.vec3f(s),
@@ -4182,7 +4176,7 @@ export class PhysicsStep {
      * alongside `_jointInitPipe`. */
     private _jointDualPipe!: TgpuComputePipeline;
     private readonly _velocityPipe: TgpuComputePipeline;
-    /** the compose pipeline, bound by {@link prepareCompose} once the external firehose exists. */
+    /** the compose pipeline, bound by {@link prepareCompose} once caller-owned GlobalTransform rows exist. */
     private _composePipe: TgpuComputePipeline | null = null;
     private _composeBase?: TgpuComputePipeline;
     private readonly _csrCountPipe: TgpuComputePipeline;
@@ -4212,8 +4206,7 @@ export class PhysicsStep {
     private _packScanBG: GPUBindGroup | null = null;
     private _packScatterBG: GPUBindGroup | null = null;
     private _gatherInputs: Inputs | null = null;
-    // rebuilt if the external firehose buffer's identity changes (it doesn't in practice —
-    // TransformsPlugin allocates it once); tracks `_composePipe`'s built-against identity
+    // rebuilt if the caller-owned GlobalTransform rows buffer changes; tracks `_composePipe`'s bound identity
     private _composeDst: GPUBuffer | null = null;
     private _composeCompiled = false;
     private _composePreparation: Promise<void> | null = null;
@@ -5733,13 +5726,13 @@ export class PhysicsStep {
         }
     }
 
-    /** bind and validate the compose pipeline once the external transforms firehose exists. */
-    async prepareCompose(transforms: GPUBuffer): Promise<void> {
-        if (this._composeDst === transforms && this._composePipe) return;
+    /** bind and validate the compose pipeline once caller-owned GlobalTransform rows exist. */
+    async prepareCompose(globalTransforms: GPUBuffer): Promise<void> {
+        if (this._composeDst === globalTransforms && this._composePipe) return;
         if (this._composeError) throw this._composeError;
         if (this._composePreparation) {
             await this._composePreparation;
-            if (this._composeDst === transforms && this._composePipe) return;
+            if (this._composeDst === globalTransforms && this._composePipe) return;
         }
         const root = Compute.root;
         this._composeBase ??= root
@@ -5749,7 +5742,7 @@ export class PhysicsStep {
             .with(
                 root.createBindGroup(composeLayout, {
                     eids: this.eids,
-                    transforms,
+                    globalTransforms,
                     interp: this._interpUbo,
                 }),
             )
@@ -5760,7 +5753,7 @@ export class PhysicsStep {
             }).then(() => {
                 this._composeCompiled = true;
                 this._composePipe = pipe;
-                this._composeDst = transforms;
+                this._composeDst = globalTransforms;
             });
             this._composePreparation = preparation;
             try {
@@ -5774,24 +5767,22 @@ export class PhysicsStep {
             return;
         }
         this._composePipe = pipe;
-        this._composeDst = transforms;
+        this._composeDst = globalTransforms;
     }
 
     /**
-     * scatter the live pose into `transforms` (the eid-indexed mat4 firehose), so a `Body`+`Part`
-     * entity renders at the pose physics owns. Dispatches over the body pool (early-out past the live
-     * count). Call after the Transform compose (which writes a stale slot for a body eid) and before
-     * the renderer reads geometry — physics.md "Body / Transform contract".
-     *
-     * `alpha` (= time.fixedAlpha, default 1) blends the previous settled pose → the current one for render
-     * interpolation (Phase 5): at >60Hz this stops a fixed-step pose repeating then jumping. 1 = the bare
-     * current pose. The standalone gates read raw `bodies`, not the composed transform, so leave it default.
-     * Await {@link prepareCompose} with this `transforms` buffer before the first call.
+     * write each body's interpolated GlobalTransform row to `globalTransforms`. Dispatches over the body
+     * pool (early-out past the live count). Record it in the output frame encoder before rendering.
+     * `alpha` blends the previous and current fixed-tick values for render interpolation; 1 selects the current
+     * GlobalTransform. Standalone solver gates read the body buffers directly, not this rendered output.
+     * Await {@link prepareCompose} with this `globalTransforms` buffer before the first call.
      */
-    compose(encoder: GPUCommandEncoder, transforms: GPUBuffer, alpha = 1): void {
+    compose(encoder: GPUCommandEncoder, globalTransforms: GPUBuffer, alpha = 1): void {
         if (this._composeError) throw this._composeError;
-        if (this._composeDst !== transforms || !this._composePipe) {
-            throw new Error("PhysicsStep.compose: await prepareCompose(transforms) before use");
+        if (this._composeDst !== globalTransforms || !this._composePipe) {
+            throw new Error(
+                "PhysicsStep.compose: await prepareCompose(globalTransforms) before use",
+            );
         }
         this._interpData[0] = alpha;
         this.device.queue.writeBuffer(this._interpUbo, 0, this._interpData);
