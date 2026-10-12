@@ -4,7 +4,8 @@ For anyone changing the solver, person or agent. Each API's contract is the JSDo
 
 ```bash
 bun install --frozen-lockfile
-bun run check
+bun check
+bun run lint
 bun run test
 bun test ./tests/oracle.oracle.ts
 bun test ./tests/corpus.oracle.ts
@@ -18,5 +19,5 @@ bun test ./tests/headless.gpu.ts
 - `tests/` holds the f64 CPU oracle, a port of the reference C++, with committed gold vectors. The corpus and closed-form tests are the evidence. A GPU-authored buffer is proved by a real-device probe; a missing GPU seat is inconclusive, never green. A rendered claim, if one is ever admitted, uses Shallot's public `captureFrame` contract.
 - `tests/character-sweep.test.ts` and the character rows of `tests/headless.gpu.ts` gate the engine's shipped character. They stay here until they move.
 - `peerDependencies` is the compatibility range. The dev dependency and `bun.lock` carry the published Shallot prerelease pin used for checks. Shallot's `shallot()` plugin owns the Vite- and Bun-side TypeGPU transform and deduplication; TGSL tests register it through `tests/preload.ts`. Package states, linking and exit: [Shallot's CONTRIBUTING](https://github.com/dylanebert/shallot/blob/main/CONTRIBUTING.md#dependencies-and-releases).
-- A release is a `v<version>` tag matching `package.json`. The release workflow runs `check` and `test` before publishing.
+- A release is a `v<version>` tag matching `package.json`. The release workflow runs `bun check`, `bun run lint` and `bun run test` before publishing.
 - Retired examples live in Git tags, listed in `ARCHIVE.md`.

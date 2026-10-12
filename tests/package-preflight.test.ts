@@ -93,7 +93,7 @@ test("packed AVBD identity and public boundary work in a scratch consumer", () =
                     name: "shallot-avbd-scratch-consumer",
                     private: true,
                     type: "module",
-                    packageManager: "bun@1.4.2",
+                    packageManager: "bun@1.4.3",
                     dependencies: {
                         "@dylanebert/shallot-avbd-physics": `file:${relative(scratchDir, artifact)}`,
                         "@dylanebert/shallot": shallotSpecifier,
