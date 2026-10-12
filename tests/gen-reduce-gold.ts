@@ -2,7 +2,7 @@
 // `reduce-gold` harness (reference/avbd-demo3d/reduce-gold.cpp). The output is the independent
 // reference reduce.test.ts gates the oracle's `reduceManifold` against — the 4.8.1 reduction crux.
 //
-// Usage: bun run tests/gen-reduce-gold.ts
+// Usage: bun tests/gen-reduce-gold.ts
 // Requires: g++ on PATH.
 
 import { spawnSync } from "child_process";

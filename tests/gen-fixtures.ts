@@ -7,7 +7,7 @@
 // Output lands in `tests/fixtures/{canonical,budget}/dense-<scene>.json`, which is
 // gitignored (regenerable).
 //
-// Usage: AVBD_DEMO3D_DIR=/absolute/path bun run tests/gen-fixtures.ts [frames]
+// Usage: AVBD_DEMO3D_DIR=/absolute/path bun tests/gen-fixtures.ts [frames]
 //        (default 600). Requires: g++ on PATH.
 
 import { spawnSync } from "child_process";

@@ -6,7 +6,7 @@
 // reduced contact world points + depths. The polytope-family gold for Phase 6.3 hull;
 // non-box hulls have no AVBD reference (demo3d is boxes only), so Bullet is the gold.
 //
-// Usage: bun run tests/gen-hull-gold.ts
+// Usage: bun tests/gen-hull-gold.ts
 // Requires: g++ on PATH.
 
 import { spawnSync } from "child_process";

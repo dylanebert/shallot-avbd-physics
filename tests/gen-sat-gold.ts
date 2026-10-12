@@ -3,7 +3,7 @@
 // box-pair configs. Output is committed (small) and is the spec collide.ts must
 // reproduce (sat.test.ts) — the SAT crux gate.
 //
-// Usage: bun run tests/gen-sat-gold.ts
+// Usage: bun tests/gen-sat-gold.ts
 // Requires: g++ on PATH.
 
 import { spawnSync } from "child_process";
