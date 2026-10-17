@@ -1,3 +1,0 @@
-[test]
-root = "."
-preload = ["./tests/preload.ts"]

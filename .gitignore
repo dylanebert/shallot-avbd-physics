@@ -1,8 +1,0 @@
-node_modules/
-*.tgz
-dist/
-test-results/
-playwright-report/
-
-# regenerable via tests/gen-fixtures.ts
-tests/fixtures/
