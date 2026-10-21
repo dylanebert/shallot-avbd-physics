@@ -1,7 +1,5 @@
 # shallot-avbd-physics
 
-An AVBD (augmented vertex block descent) GPU rigid-body solver for [Shallot](https://github.com/dylanebert/shallot), for more bodies than the built-in physics holds.
+An AVBD (augmented vertex block descent) GPU rigid-body solver for [Shallot](https://github.com/dylanebert/shallot). Abandoned and archived: Shallot's GPU physics is instead a port of Box3D, the algorithm its built-in physics runs. Use Shallot's built-in physics.
 
-It is unpublished and does not build against any published Shallot; it is rebuilt on Shallot 0.10. Until then, use Shallot's built-in physics.
-
-Changing it: [`CONTRIBUTING.md`](CONTRIBUTING.md). MIT.
+The solver is at tag `archive/solver`, and its showcases at `archive/showcases`. It was never published and does not build against any published Shallot. MIT.
